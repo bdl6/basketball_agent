@@ -81,3 +81,30 @@ def test_thin_net_calibration_without_motion_measurements_stays_uncertain():
     matches = [{'time':i*3+1,'verdict':'made','overlay':{'rim':rim}} for i in range(8)]
     checks = recompute_checks(matches, {'results':[{'frames':frames} for _ in matches]})
     assert all(c['status'] == 'unsure' for c in checks)
+
+
+@pytest.mark.parametrize("automatic_roi", [
+    {"x1": 10, "y1": 0, "x2": 90, "y2": 80},
+    [10, 0, 90, 80],
+])
+def test_successful_auto_roi_is_passed_as_coordinates(tmp_path, automatic_roi):
+    video = tmp_path / "v.mp4"
+    model = tmp_path / "m.pt"
+    video.touch()
+    model.write_bytes(b"model")
+    cfg = load_config(None, {"video": video, "model": model})
+    observed = []
+    def stage(script, args, output, log):
+        if script == "detect_auto_roi.py":
+            return {"success": True, "roi": automatic_roi}
+        if script == "scan_video.py":
+            start = args.index("--roi") + 1
+            observed.extend(args[start:start + 4])
+            return {"records": []}
+        if script == "generate_candidates.py":
+            return {"candidates": [], "rim": {"center_x": 50}}
+        raise AssertionError(script)
+    result = analyze(cfg, tmp_path, stage_runner=stage,
+                     metadata={"width": 100, "height": 100, "fps": 25, "duration": 1})
+    assert observed == ["10", "0", "90", "80"]
+    assert result.events == []

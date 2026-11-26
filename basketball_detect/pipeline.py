@@ -100,6 +100,15 @@ def analyze(config: DetectConfig, run_dir: Path, *, stage_runner=run_stage, meta
         if not auto.get("success"):
             raise RuntimeError("未稳定定位篮筐；请检查画面，或配置 roi 分析区域后重试")
         roi = auto["roi"]
+        if isinstance(roi, dict):
+            try:
+                roi = [roi[key] for key in ("x1", "y1", "x2", "y2")]
+            except KeyError:
+                raise ValueError("自动篮筐区域坐标不完整") from None
+    if (not isinstance(roi, (list, tuple)) or len(roi) != 4
+            or any(isinstance(v, bool) or not isinstance(v, int) for v in roi)
+            or roi[0] < 0 or roi[1] < 0 or roi[2] <= roi[0] or roi[3] <= roi[1]):
+        raise ValueError("篮筐区域坐标无效")
     if roi[2] > meta["width"] or roi[3] > meta["height"]:
         raise ValueError("roi 超出视频画面")
     roi_args = ["--roi", *roi]
