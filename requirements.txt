@@ -1,0 +1,2 @@
+# Install the unified application and optional detector from this checkout.
+-e .[detection]

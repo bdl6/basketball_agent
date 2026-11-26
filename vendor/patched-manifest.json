@@ -1,0 +1,90 @@
+[
+  {
+    "path": "vendor\\src\\basketball_highlight\\__init__.py",
+    "sha256": "8BC245B81F29BB95FA65884ED6FC08EB518FC15E6B6884A457DE1C079245E453"
+  },
+  {
+    "path": "vendor\\src\\basketball_highlight\\events.py",
+    "sha256": "D00B9C0E43334CD905485776844A1B890FE292D1C33162ED7499A80ED6A931E5"
+  },
+  {
+    "path": "vendor\\src\\basketball_highlight\\features.py",
+    "sha256": "D6A925DA85FD3C75F2C5B122E49F530C499FD4DCC4F90C6C2A9DE623897857FF"
+  },
+  {
+    "path": "vendor\\src\\basketball_highlight\\geometry.py",
+    "sha256": "24D86BF9BAE468B8E460AB397BE6FF7E8D95821949AF558E4E276F049DD983C1"
+  },
+  {
+    "path": "vendor\\src\\basketball_highlight\\inference.py",
+    "sha256": "5986C9B99E2DEBE4FB81E8B244A07536E05F46D03399E0A95CE56267048B139E"
+  },
+  {
+    "path": "vendor\\src\\basketball_highlight\\net_motion.py",
+    "sha256": "C94FCC4194F2E7131B1643746AB92937A636072CCB8808678B85869DB295FC90"
+  },
+  {
+    "path": "vendor\\src\\basketball_highlight\\onnx_detector.py",
+    "sha256": "C444CEF687B7FFDC3BF05F85902B13F106FFC70531692D22AFA16D0639DB4314"
+  },
+  {
+    "path": "vendor\\src\\basketball_highlight\\ranking.py",
+    "sha256": "45A6C98C58D064C74DF97CB77CBEBCD424C6D56BDC33073263F2B0FEF990A014"
+  },
+  {
+    "path": "vendor\\src\\basketball_highlight\\rim_check.py",
+    "sha256": "EF8CBDB1962DE066E6F23D74B3513EE3F61361BC47ED713B077522E6AC93B0E9"
+  },
+  {
+    "path": "vendor\\src\\basketball_highlight\\roi.py",
+    "sha256": "1364244997A899E293EC80159761B11E4426CEDDA5CD59BF6DBAB787D098787D"
+  },
+  {
+    "path": "vendor\\src\\basketball_highlight\\runtime_errors.py",
+    "sha256": "A28B4A102663FB9ABB4891EA9C0EBD84B16DF394D5BADAE9AD7E9E54579B1FA0"
+  },
+  {
+    "path": "vendor\\src\\basketball_highlight\\sampling.py",
+    "sha256": "458CCAC3F0CDC34353DF3E5866CBCF261D3D26521BEB016DE7D4AAD9EDF54D37"
+  },
+  {
+    "path": "vendor\\src\\basketball_highlight\\tracking.py",
+    "sha256": "CC1F460C85861EB43EFFD680C0603A4E9DABFE876B84F6695B641A33EA783624"
+  },
+  {
+    "path": "vendor\\src\\basketball_highlight\\trajectory.py",
+    "sha256": "843DD371D9000277ED406F5440605F770763E928B2D365C6E810AEEB6B3DEAE7"
+  },
+  {
+    "path": "vendor\\src\\basketball_highlight\\verdict.py",
+    "sha256": "C52496AA9B3FEBF18968884D207D252F1FE856018CD2B87BEA8C0C363E1E6A39"
+  },
+  {
+    "path": "vendor\\scripts\\cache_io.py",
+    "sha256": "67557B7CA2ACFC0BA914FA99553E6A32E4ABD61374692AD202B29C951B6CE5E5"
+  },
+  {
+    "path": "vendor\\scripts\\detect_auto_roi.py",
+    "sha256": "DA8509067D17F235B93C54F5ADD7A076996EA8EB19F52FB87D8148E30CB6EB4C"
+  },
+  {
+    "path": "vendor\\scripts\\generate_candidates.py",
+    "sha256": "2E02F8CF25E902CACA04A191B69811F440EAF886970466BC768A8B048A325696"
+  },
+  {
+    "path": "vendor\\scripts\\refine_candidates.py",
+    "sha256": "08C4A0C900FF90D3BFB06B9C544BB6C38E538280DC08BFD8E9E1F1B00F4B4116"
+  },
+  {
+    "path": "vendor\\scripts\\refine_dynamic_candidates.py",
+    "sha256": "4D1EB119F8C44C1AD52D0BFA735B8E9BF64E826BB925E6783DA0F460B35EAC9F"
+  },
+  {
+    "path": "vendor\\scripts\\scan_video.py",
+    "sha256": "CC183F7650087600160465BA5CC13D2E3785E3C4BF60C5E2FCE6F59D09CC2C3D"
+  },
+  {
+    "path": "vendor\\scripts\\verify_rim_crossing.py",
+    "sha256": "9937A065DDC9421E93229A6CE00D05289E6E8A9EC27D1700878AAD35ED3CFCED"
+  }
+]
