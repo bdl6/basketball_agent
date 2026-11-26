@@ -73,7 +73,38 @@ async function request<T>(
   }
 }
 const base = (s: Session) => "/api/jobs/" + encodeURIComponent(s.id);
+export interface ProgressSnapshot { job: Job; messages: Message[] }
+async function watchProgress(session: Session, receive: (data: ProgressSnapshot) => void, signal: AbortSignal): Promise<void> {
+  const response = await fetch(base(session) + "/events", {
+    headers: { "X-Task-Token": session.token, Accept: "text/event-stream" },
+    signal, referrerPolicy: "no-referrer", cache: "no-store",
+  });
+  if (!response.ok) throw new ApiError("进度连接失败", response.status);
+  if (!response.body) throw new ApiError("浏览器不支持进度推送");
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  try {
+    while (!signal.aborted) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      buffer += decoder.decode(chunk.value, {stream: true});
+      buffer = buffer.replace(/\r\n/g, "\n");
+      let boundary: number;
+      while ((boundary = buffer.indexOf("\n\n")) >= 0) {
+        const frame = buffer.slice(0, boundary);
+        buffer = buffer.slice(boundary + 2);
+        if (frame.startsWith(":")) continue;
+        if (frame.includes("event: expired")) throw new ApiError("任务已过期", 404);
+        const data = frame.split("\n").filter(line => line.startsWith("data:")).map(line => line.slice(5).trimStart()).join("\n");
+        if (data && frame.includes("event: snapshot")) receive(JSON.parse(data) as ProgressSnapshot);
+      }
+    }
+  } finally { reader.releaseLock(); }
+  if (!signal.aborted) throw new ApiError("进度连接已断开");
+}
 export const api = {
+  watch: watchProgress,
   config: (signal?: AbortSignal) =>
     request<Config>("/api/config", undefined, { signal }),
   job: (s: Session, signal?: AbortSignal) =>

@@ -11,8 +11,8 @@ import secrets
 import shutil
 import subprocess
 from pathlib import Path
-from fastapi import FastAPI, File, Header, HTTPException, UploadFile
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi import FastAPI, File, Header, HTTPException, UploadFile, Request
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 from .store import Store
 
@@ -153,6 +153,14 @@ def create_app(settings=None, *, probe=probe_duration, executor=None):
                     )
                 ]
             )
+
+    @app.get("/api/jobs/{jid}/events")
+    async def events(jid: str, request: Request, x_task_token: str | None = Header(default=None)):
+        authorized(jid, x_task_token)
+        from .progress import stream_task_events
+        return StreamingResponse(stream_task_events(store, jid, x_task_token, request),
+            media_type="text/event-stream", headers={"Cache-Control": "no-cache, no-store",
+                "X-Accel-Buffering": "no", "Referrer-Policy": "no-referrer"})
 
     @app.post("/api/jobs/{jid}/messages")
     def submit(

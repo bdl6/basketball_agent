@@ -94,13 +94,42 @@ export default function App() {
     if (!session || uploading) return;
     const c = new AbortController();
     let timer: ReturnType<typeof setTimeout>;
+    let reconnect: ReturnType<typeof setTimeout>;
+    let streaming = false;
+    async function watch() {
+      try {
+        await api.watch(session!, (snapshot) => {
+          if (c.signal.aborted) return;
+          streaming = true;
+          setJob(snapshot.job);
+          setMessages(snapshot.messages);
+          setOffline(false);
+          setUnavailable(false);
+        }, c.signal);
+      } catch (e) {
+        if (c.signal.aborted) return;
+        streaming = false;
+        if (e instanceof ApiError && e.status === 404) {
+          setUnavailable(true);
+          setJob(null);
+          setError("此视频已到期或访问凭证无效，请重新上传视频。");
+          return;
+        }
+      }
+      if (!c.signal.aborted) reconnect = setTimeout(() => void watch(), 2500);
+    }
     async function poll() {
+      if (streaming) {
+        timer = setTimeout(poll, 2500);
+        return;
+      }
       try {
         const [j, m] = await Promise.all([
           api.job(session!, c.signal),
           api.messages(session!, c.signal),
         ]);
         if (c.signal.aborted) return;
+        if (streaming) { timer = setTimeout(poll, 2500); return; }
         setJob(j);
         setMessages(m.messages);
         setOffline(false);
@@ -119,9 +148,11 @@ export default function App() {
       if (!c.signal.aborted) timer = setTimeout(poll, 2500);
     }
     void poll();
+    void watch();
     return () => {
       c.abort();
       clearTimeout(timer);
+      clearTimeout(reconnect);
     };
   }, [session?.id, session?.token, uploading, refresh]);
   useEffect(() => {
@@ -394,7 +425,9 @@ export default function App() {
             )}
             {job && (
               <div className={"notice " + job.status} role="status">
-                <strong>{stages[job.status]}</strong>
+                <strong>{["analyzing", "rendering"].includes(job.status)
+                  ? [...messages].reverse().find(m => m.role === "status")?.text || stages[job.status]
+                  : stages[job.status]}</strong>
                 {active(job) && <p>完成后会自动更新。处理期间可以查看进度。</p>}
                 {job.error && <p>{job.error}</p>}
                 {job.status === "interrupted" && (

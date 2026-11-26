@@ -1,4 +1,4 @@
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { vi, test, expect, beforeEach } from "vitest";
 import App from "./App";
@@ -11,6 +11,7 @@ vi.mock("./api", async (importOriginal) => ({
     job: vi.fn(),
     messages: vi.fn(),
     send: vi.fn(),
+    watch: vi.fn(),
   },
 }));
 const mock = api as any;
@@ -38,6 +39,7 @@ const completed = {
 };
 beforeEach(() => {
   vi.clearAllMocks();
+  mock.watch.mockImplementation((_s: unknown, _cb: unknown, signal: AbortSignal) => new Promise<void>((resolve) => signal.addEventListener("abort", () => resolve(), { once: true })));
   mock.config.mockResolvedValue(config);
   mock.job.mockResolvedValue(completed);
   mock.messages.mockResolvedValue({ messages: [] });
@@ -291,4 +293,20 @@ test("durable message request id resolves a previously unacknowledged mutation",
     ).toBeUndefined(),
   );
   expect(screen.getByRole("textbox")).toHaveValue("");
+});
+
+
+test("server pushes completed stages into chat without waiting for polling", async () => {
+  localStorage.setItem("basketball-session", JSON.stringify({id:"one",token:"secret"}));
+  let push: any;
+  mock.watch.mockImplementation((_s: unknown, callback: any, signal: AbortSignal) => {
+    push = callback;
+    return new Promise<void>((resolve) => signal.addEventListener("abort", () => resolve(), { once:true }));
+  });
+  render(<App />);
+  await waitFor(() => expect(push).toBeTypeOf("function"));
+  await waitFor(() => expect(mock.job).toHaveBeenCalled());
+  await act(async () => push({ job: {...completed,status:"analyzing",result:null},
+    messages:[{id:"stage-1",role:"status",text:"3/6 筛选进球候选：完成"}] }));
+  expect(screen.getAllByText("3/6 筛选进球候选：完成").length).toBeGreaterThan(0);
 });

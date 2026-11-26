@@ -77,3 +77,10 @@ def render_highlights(video_path: Path, events: Sequence[Event], plan: EditPlan,
 Analyzer stable IDs must survive persistence/re-render. Analysis includes source duration and metadata. Renderer clips to source bounds, merges overlaps, retains source audio if present, produces browser-playable MP4 and returns selected event_ids. Raise ValueError for invalid plan/no selected made events, RuntimeError for detector/FFmpeg failures. No backend dependency is imported by these adapters. Model path is server configuration and is never supplied by the LLM.
 
 `contracts/models.py` provides shared validation types. Backend owns durable jobs/messages; agent receives persisted events, plan and displayed IDs, updates the plan and invokes renderer without re-analysis for modifications. No checkpoint/version service is implied.
+
+
+## Server-pushed progress (SSE)
+
+`GET /api/jobs/{id}/events` requires `X-Task-Token` (never a query token). The client uses streaming fetch so credentials remain in the header. Response is `text/event-stream` with buffering disabled and no cache. `event: snapshot` data contains `{job: <status response>, messages: [...]}`; the initial snapshot includes durable history, and subsequent changes are pushed automatically. Heartbeat comments keep idle connections alive. Expiration sends `event: expired` and closes; clients reconnect after transient disconnects and may use existing GET endpoints as fallback.
+
+Recognition publishes stage start/completion messages: 1/6 locate hoop, 2/6 scan tracks, 3/6 select candidates, 4/6 refine candidates, 5/6 verify crossing; rendering is 6/6. Conditional stages only run when candidates exist; no fabricated percentage or ETA. The detector accepts an optional on_progress callback, passed through the production analyzer and graph to the existing acknowledged worker IPC. Each message is committed before the child continues, so completed stages survive refresh. SSE reads task-owned persisted state across API/worker processes.

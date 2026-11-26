@@ -6,9 +6,10 @@ from basketball_detect.pipeline import analyze as _analyze
 from contracts.models import Analysis, Event
 
 
-def analyze_video(video_path: Path, work_dir: Path, *, model_path: Path) -> Analysis:
+def analyze_video(video_path: Path, work_dir: Path, *, model_path: Path, on_progress=None) -> Analysis:
     video_path, work_dir, model_path = Path(video_path), Path(work_dir), Path(model_path)
-    result = _analyze(DetectConfig(video=video_path, model=model_path, output=work_dir), work_dir)
+    options = {"on_progress": on_progress} if on_progress is not None else {}
+    result = _analyze(DetectConfig(video=video_path, model=model_path, output=work_dir), work_dir, **options)
     if not result.rim:
         raise RuntimeError('未稳定定位篮筐，请使用篮筐清晰的固定机位视频')
     events = [Event(id=f"event-{raw['id']}", time=raw['time'], label=raw['label'], evidence=dict(raw))

@@ -55,3 +55,8 @@ Cross-module verification exercised initial two-event highlights, combined remov
 No live LLM key has been supplied and no real authorized basketball acceptance sample is available. The identified source media is a demonstration screen recording. Recognition precision/recall, real sample/device processing time, live model behavior/cost and full successful browser upload → highlight → combined edit → playback/download remain outstanding. Synthetic tests cannot establish recognition accuracy. External model weights remain server-provisioned and undistributed; GPU and VFR/rotation are not validated. Using a borrowed detector virtualenv is not evidence of a clean installation of all application dependencies.
 
 P3 is only partially verified. Local usage instructions are complete in README; do not treat the integrated code or checked P0/P1/P2 implementation items as completion of v0.4 S4 real-browser acceptance. No production deployment or scope extension is included.
+
+
+## Stage progress delivery
+
+Implemented task-protected SSE snapshots plus reconnection/polling fallback in the chat. Each recognition stage emits a start and completion message, forwarded through analyzer/graph/runner and committed by worker before continuation. Current status displays the latest detailed stage. Validation: 111 Python tests passed (one existing Starlette/httpx warning), 20 frontend tests passed, production build passed. Live HTTP smoke through port5173 confirmed SSE snapshots and actual worker messages for synthetic hoop localization start/completion, followed by the expected no-hoop failure. This is transport validation, not recognition-quality evidence. Active local servers now use integration worktree for API8000, Web5173 and the serial worker.

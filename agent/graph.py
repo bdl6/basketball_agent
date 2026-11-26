@@ -12,6 +12,7 @@ from agent.tools import apply_operations, list_events
 def create_graph(*, interpreter=None, analyzer=None, renderer=None):
     """Inject synchronous boundaries for offline testing; production uses real adapters."""
     interpreter = interpreter if interpreter is not None else OpenAIInterpreter()
+    default_analyzer = analyzer is None
     if analyzer is None:
         from video_engine.analyzer import analyze_video
         analyzer = analyze_video
@@ -51,7 +52,8 @@ def create_graph(*, interpreter=None, analyzer=None, renderer=None):
 
     def analyze(state):
         state['on_stage']('analyzing')
-        analysis = analyzer(state['video_path'], state['work_dir'], model_path=state['model_path'])
+        options = {'on_progress': state['on_stage']} if default_analyzer else {}
+        analysis = analyzer(state['video_path'], state['work_dir'], model_path=state['model_path'], **options)
         return {'events': [event.model_dump() for event in analysis.events]}
 
     def plan(state):
@@ -81,7 +83,7 @@ def create_graph(*, interpreter=None, analyzer=None, renderer=None):
             message += f'将排除{details}。'
         if prior:
             message += f'继续排除进球 ID：{"、".join(prior)}。'
-        message += '正在生成新集锦。'
+        message += '6/6 生成集锦：处理中。'
         state['on_stage']({'status': 'rendering', 'message': message,
             'excluded_event_ids': excluded, 'excluded_ordinals': ordinals,
             'before_seconds': plan.before_seconds, 'after_seconds': plan.after_seconds})

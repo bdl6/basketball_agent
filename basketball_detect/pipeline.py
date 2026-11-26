@@ -81,17 +81,31 @@ def recompute_checks(matches: list[dict], output: dict) -> list[dict]:
     return final
 
 
-def analyze(config: DetectConfig, run_dir: Path, *, stage_runner=run_stage, metadata=None) -> AnalysisResult:
+def analyze(config: DetectConfig, run_dir: Path, *, stage_runner=run_stage, metadata=None, on_progress=None) -> AnalysisResult:
     if not config.model.is_file():
         raise ValueError(f"模型不存在: {config.model}")
     meta = metadata if metadata is not None else inspect_video(config.video)
     run_dir.mkdir(parents=True, exist_ok=True)
     timings = {}
+    labels = {
+        'detect_auto_roi.py': ('locating', '1/6 定位篮筐'),
+        'scan_video.py': ('scanning', '2/6 扫描篮球轨迹'),
+        'generate_candidates.py': ('candidates', '3/6 筛选进球候选'),
+        'refine_dynamic_candidates.py': ('refining', '4/6 精细分析候选'),
+        'verify_rim_crossing.py': ('verifying', '5/6 穿筐复核'),
+    }
+    def report(script, phase):
+        if on_progress is not None:
+            step, label = labels[script]
+            on_progress({'status': 'analyzing', 'step': step, 'phase': phase,
+                         'message': label + ('：处理中' if phase == 'started' else '：完成')})
     def stage(script, args):
         print(f"正在处理: {script}", file=sys.stderr, flush=True)
+        report(script, 'started')
         start = time.perf_counter()
         result = stage_runner(script, list(map(str, args)), run_dir / f"{Path(script).stem}.json", run_dir / f"{Path(script).stem}.log")
         timings[Path(script).stem] = round(time.perf_counter() - start, 3)
+        report(script, 'completed')
         return result
     common = ["--video", config.video, "--model", config.model, "--device", config.device]
     roi = config.roi

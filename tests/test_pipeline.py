@@ -108,3 +108,22 @@ def test_successful_auto_roi_is_passed_as_coordinates(tmp_path, automatic_roi):
                      metadata={"width": 100, "height": 100, "fps": 25, "duration": 1})
     assert observed == ["10", "0", "90", "80"]
     assert result.events == []
+
+
+def test_stage_progress_reports_start_and_completion_in_order(tmp_path):
+    video = tmp_path / 'v.mp4'; video.touch()
+    model = tmp_path / 'm.pt'; model.write_bytes(b'model')
+    cfg = load_config(None, {'video': video, 'model': model})
+    progress = []
+    def stage(script, *args):
+        assert progress[-1]['phase'] == 'started'
+        if script == 'detect_auto_roi.py': return {'success': True, 'roi': [0,0,100,100]}
+        if script == 'scan_video.py': return {'records': []}
+        return {'candidates': [], 'rim': {'center_x': 50}}
+    analyze(cfg,tmp_path,stage_runner=stage,on_progress=progress.append,
+            metadata={'width':100,'height':100,'fps':25,'duration':1})
+    assert [(e['step'], e['phase']) for e in progress] == [
+        ('locating','started'),('locating','completed'),
+        ('scanning','started'),('scanning','completed'),
+        ('candidates','started'),('candidates','completed')]
+    assert all(e['status']=='analyzing' and e['message'] for e in progress)
