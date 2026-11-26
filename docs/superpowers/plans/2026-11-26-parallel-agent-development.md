@@ -13,17 +13,17 @@
 ## 1. 分支与独立工作文件夹
 
 ```text
-<worktree 根目录>/
-├── integration/     # codex/integration，主 Agent
-├── frontend/        # codex/frontend，聊天前端
-├── backend/         # codex/backend，最小 API 与 worker
-├── video-engine/    # codex/video-engine，识别与集锦
-└── agent/           # codex/agent，LangGraph 与指令处理
+C:/Users/lenovo/.codex/worktrees/
+├── integration/vibe_code/     # codex/integration，主 Agent
+├── frontend/vibe_code/        # codex/frontend，聊天前端
+├── backend/vibe_code/         # codex/backend，最小 API 与 worker
+├── video-engine/vibe_code/    # codex/video-engine，识别与集锦
+└── agent/vibe_code/           # codex/agent，LangGraph 与指令处理
 ```
 
-原生工具创建并注册工作树，以返回的实际路径为准。每个文件夹是完整仓库副本，frontend 工作树中也会有 frontend 源码目录。最终 main 只有一份模块目录，不包含这些工作树副本。
+上述工作树已由原生工具创建并注册。原始 main 工作区为 `E:/vibe_code`，其未提交文档保持不变。用户已明确授权多 Agent 并行 worktree，优先于技能的默认串行执行建议。每个文件夹是完整仓库副本，frontend 工作树中也会有 frontend 源码目录。最终 main 只有一份模块目录，不包含这些工作树副本。
 
-当前最多主 Agent + 三个开发 Agent 并行。先 frontend/backend/video-engine，视频工具稳定后释放槽位启动 agent，避免空等或超额并发。
+实施期间遵守最多主 Agent + 三个开发 Agent 并行的限制；frontend、backend、video-engine 与后续 agent 模块均已在独立分支完成初步集成。当前最终修复和验收仍在 integration 推进，不合并 main、不 push。
 
 ## 2. 仓库建议结构
 
@@ -108,26 +108,26 @@ basketball_agent/
 
 ### P0：共同基线
 
-- [ ] 主 Agent 在 integration 整合 baketball_detect，处理 README、pyproject、测试等公共冲突，保留许可。
-- [ ] 主 Agent 清理 wechat_service 及微信专属测试、配置和部署说明，更新 README 与 Python 包发现设置；搜索残余引用，确认网页和识别模块不依赖微信凭证即可启动。历史 Git 提交保留，无需在目标目录保留微信服务。
-- [ ] 重跑已有测试，记录权重与真实素材限制，不将合成验证当作识别准确率。
-- [ ] 定义最小数据与 API 契约、指令操作格式和 mock；确认后创建或同步各 worktree。
+- [x] 主 Agent 在 integration 整合 baketball_detect，处理 README、pyproject、测试等公共冲突，保留许可。
+- [x] 主 Agent 清理 wechat_service 及微信专属测试、配置和部署说明，更新 README 与 Python 包发现设置；搜索残余引用，确认网页和识别模块不依赖微信凭证即可启动。历史 Git 提交保留，无需在目标目录保留微信服务。
+- [x] 重跑已有测试，记录权重与真实素材限制，不将合成验证当作识别准确率。
+- [x] 定义最小数据与 API 契约、指令操作格式和 mock；确认后创建或同步各 worktree。
 
 ### P1：前端、后端、视频并行
 
-- [ ] frontend：设计参考 `frontend-design` skill，先定位并阅读 SKILL.md，再确定聊天页的排版、配色、间距和交互；覆盖欢迎、上传、处理中、结果与错误状态，检查手机/桌面布局、键盘操作和可读性。当前本地未检索到该 skill，实施前补齐来源；不以参考设计为由增加页面或后端功能。
-- [ ] frontend：新会话立即显示自我介绍、上传引导和四类指令示例，完成消息区、输入框、上传及结果卡片；验证模型不可用时欢迎仍显示。
-- [ ] backend：实现上传、SQLite 状态/消息/当前方案、任务凭证与单 worker；验证请求不阻塞、越权拒绝、重复请求去重、重启标记中断。
-- [ ] video-engine：封装现有识别与集锦导出；验证前五后两秒、重叠与边界、无进球、音轨和可播放性。
-- [ ] 各模块针对上述关键行为先运行失败测试，再实现、验证并提交；前端先用 mock，随后切换真实 API。
-- [ ] 主 Agent 集成自动集锦聊天流程，固定十秒或原样交付仅用于内部调试。
+- [x] frontend：设计参考 `frontend-design` skill，先定位并阅读 SKILL.md，再确定聊天页的排版、配色、间距和交互；覆盖欢迎、上传、处理中、结果与错误状态，检查手机/桌面布局、键盘操作和可读性。已读取公开来源 `https://raw.githubusercontent.com/anthropics/skills/main/skills/frontend-design/SKILL.md`，视觉 tokens 记录在 `frontend/DESIGN.md`，不表示全局安装；不以参考设计为由增加页面或后端功能。
+- [x] frontend：新会话立即显示自我介绍、上传引导和四类指令示例，完成消息区、输入框、上传及结果卡片；验证模型不可用时欢迎仍显示。
+- [x] backend：实现上传、SQLite 状态/消息/当前方案、任务凭证与单 worker；验证请求不阻塞、越权拒绝、重复请求去重、重启标记中断。
+- [x] video-engine：封装现有识别与集锦导出；验证前五后两秒、重叠与边界、无进球、音轨和可播放性。
+- [x] 各模块已实现、验证并提交关键行为；前端先用同一契约的 mock，随后切换真实 API。当前最终修复的回归仍待完成，见开发进度记录。
+- [x] 主 Agent 集成自动集锦聊天流程，固定十秒或原样交付仅用于内部调试。
 
 ### P2：LangGraph 与聊天修改
 
-- [ ] 视频工具稳定后启动 agent 分支，前端/后端继续对接消息与指令状态。
-- [ ] 实现前后时长绝对/相对调整、排除事件及组合指令；歧义先澄清，不支持操作拒绝执行。
-- [ ] 图从已保存业务数据启动请求流程，不建设检查点和人工 interrupt；测试修改后分析调用计数不增加。
-- [ ] 实现同请求去重、参数校验和执行错误反馈，渲染成功后替换当前结果引用，失败保留旧成片。
+- [x] 视频工具稳定后启动 agent 分支，前端/后端继续对接消息与指令状态。
+- [x] 实现前后时长绝对/相对调整、排除事件及组合指令；歧义先澄清，不支持操作拒绝执行。
+- [x] 图从已保存业务数据启动请求流程，不建设检查点和人工 interrupt；测试修改后分析调用计数不增加。
+- [x] 实现同请求去重、参数校验和执行错误反馈，渲染成功后替换当前结果引用，失败保留旧成片。
 
 ### P3：最小闭环验收
 
@@ -142,4 +142,4 @@ basketball_agent/
 
 重点审查：重复相对指令不累加、事件编号不等同合并片段、忙碌时修改不并发、失败不覆盖旧成片、重启不假报成功。分别由 agent/backend/video_engine 与集成测试覆盖。
 
-本文件仅为计划，未创建上述工作树或服务。首版交付依据为任务计划 v0.4 的 S4 最小闭环，不沿用旧 M4 的扩展验收要求。
+上述工作树和 P0/P1/P2 模块已创建并初步集成（integration 13850c7）。修复前 Python 97 项、前端 18 项及构建通过；合成集成 2 项使用模拟识别/LLM、实际 FFmpeg/LangGraph 通过。真实 HTTP 无篮筐素材返回安全失败；浏览器只验证欢迎、配置与未上传提示，文件选择器超时，完整成功上传/修改/播放下载仍未验收。当前 worker 生命周期锁、渲染前说明、POSIX 子进程终止和 Windows 长路径发布修复及最终全量回归尚未确认通过。真实授权篮球样本与 live LLM key 未提供，真实识别效果和模型费用仍待记录。P3 复合验收项保持未勾选；详细证据见 [开发进度](../../implementation/development-progress.md)。首版交付依据仍为任务计划 v0.4 的 S4 最小闭环，不沿用旧 M4 扩展要求。

@@ -2,24 +2,52 @@
 
 ## Scope and integration ruling
 
-2026-11-26: v0.4 task plan and parallel development plan copied byte-for-byte from E:/vibe_code; originals remain untouched. Explicit user authorization for parallel isolated worktrees overrides any sequential skill default. Work is on codex/integration only; no merge into main and no push is authorized or performed.
+2026-11-26: task-plan v0.4 remains the sole MVP scope. The initial P0 copies of both plans were byte-for-byte copies of E:/vibe_code; the integration copies now record implementation progress. Original main checkout E:/vibe_code and its uncommitted plan documents remain untouched. Explicit user authorization for parallel isolated worktrees overrides any sequential skill default. Implementation is on codex branches; no merge into main or push has been performed.
 
-## P0 baseline
+## Actual worktrees
 
-Integrated baketball_detect 6598f8e, retaining all detector tests, vendor scripts, attribution and MIT license. The only merge conflict was .gitignore; both useful sets of rules were retained. Inspection before changes found no wechat_service, exclusive WeChat tests, dependencies, configuration or deployment entrypoints in either main b59497d or detection 6598f8e. No recursive deletion was needed. Historical planning documents mentioning the old direction remain historical references, not runnable services.
+| Branch | Directory | Responsibility |
+|---|---|---|
+| main | E:/vibe_code | Original checkout; unchanged by integration work |
+| codex/integration | C:/Users/lenovo/.codex/worktrees/integration/vibe_code | Shared contracts, integration, verification and docs |
+| codex/frontend | C:/Users/lenovo/.codex/worktrees/frontend/vibe_code | Chat UI |
+| codex/backend | C:/Users/lenovo/.codex/worktrees/backend/vibe_code | API, SQLite and serial worker |
+| codex/video-engine | C:/Users/lenovo/.codex/worktrees/video-engine/vibe_code | Detection adapter and highlights |
+| codex/agent | C:/Users/lenovo/.codex/worktrees/agent/vibe_code | LangGraph and structured commands |
+| baketball_detect | C:/Users/lenovo/.codex/worktrees/baketball-detect/vibe_code | Retained original detector baseline |
 
-Shared contracts and exact HTTP examples are in api-contract.md and contracts/models.py. Analysis and rendering remain synchronous worker adapters; new modules follow these contracts. API/config defaults are a 100 MiB upload, 300 second clip and 24 hour retention; deployment may override them.
+Native tools created and registered the worktrees. Each is a full repository checkout; these folders are not duplicated module directories inside main.
 
-Unified pyproject declares API/LangGraph dependencies and optional detection/dev groups with package discovery for the five owned module roots. Source checkout is required for vendored algorithm scripts. P0 does not implement API, worker, frontend, LLM or clip export.
+## P0 completed
 
-## Verification
+Baseline commit 3331057 integrated baketball_detect 6598f8e, retaining detector tests, vendor scripts, attribution and MIT license. The sole .gitignore conflict retained useful rules from both sides. Inspection found no wechat_service, exclusive WeChat tests/dependencies/configuration/deployment entrypoints in either main b59497d or detection 6598f8e, so no recursive deletion was necessary. Historical planning references do not represent runnable services.
 
-Current integration run: `C:/Users/lenovo/.codex/worktrees/baketball-detect/vibe_code/.venv/Scripts/python.exe -m pytest -q --basetemp=runs/test-baseline` passed all 45 tests in 5.52 seconds. First run had 31 passes and 14 setup errors because runs/ did not exist; creating that ignored parent resolved every setup error. No detector implementation changes were needed. Contract model imports/default serialization and TOML parse also passed. CLI entrypoint resolves to basketball_detect.__main__:main. No clean dependency installation was performed.
+Shared contracts and exact HTTP examples are in api-contract.md and contracts/models.py. Unified pyproject declares API/LangGraph dependencies and optional detection/dev groups, discovering all five owned module roots. Vendored detector scripts require a source checkout. The P0 detector regression passed all 45 tests in 5.52 seconds using the original detection worktree virtualenv. Initial missing runs/ parent setup errors were corrected; detector implementation was unchanged. Contract imports/defaults, invalid-operation rejection, TOML parse and callable CLI entrypoint were verified.
 
-## Evidence boundaries
+## P1 and P2 integrated
 
-No real authorized basketball video supplied; synthetic detector and media tests do not establish recognition accuracy. External model path in config.example.json must be provisioned; model weights are not distributed. GPU, VFR/rotation, end-to-end browser playback and real LLM behavior remain to be verified by subsequent delivery work. The borrowed detector virtualenv is not evidence of a clean install of the new API dependencies.
+Integration at 13850c7 contains the frontend, backend, video-engine and agent implementations. Frontend provides fixed welcome, upload/config limits, messages, status, result playback/download controls and session restoration. It read the public [frontend-design source](https://raw.githubusercontent.com/anthropics/skills/main/skills/frontend-design/SKILL.md); frontend/DESIGN.md records layout, color and typography tokens. This records reading a public source, not installing a global skill.
 
-## Parallel preflight rulings
+Backend provides authenticated task/message/result routes, SQLite persistence, durable serial queueing and worker invocation. Video adapters retain original judgments/evidence and produce verified MP4 highlights with overlap/boundary/audio handling. LangGraph handles initial analysis/rendering and structured absolute/relative timing and ordinal exclusions; modifications reuse stored events. Deduplication, parameter validation, clarification and preserving a prior valid result on failure are covered by automated checks.
 
-P1 frontend mocks consume the same API contract as backend. P1 video wrappers import contracts models and never backend. P2 worker invokes the graph and rendering synchronously; rendering must not recursively enqueue another task. Original main checkout and its uncommitted v0.4 plans are preserved. Source media currently identified is a demonstration screen recording; real basketball acceptance remains uncertain. User confirmed OpenAI-compatible LLM integration: server-only LLM_BASE_URL, LLM_API_KEY and LLM_MODEL configure that adapter; no credentials enter frontend or tracked files.
+P1 frontend mocks consume the same API contract as backend. Video wrappers import contracts models and never backend. Worker invokes the graph and rendering synchronously; rendering does not recursively enqueue another task. Model configuration uses a server-side OpenAI-compatible adapter; credentials are never frontend configuration.
+
+## Verification evidence before final fixes
+
+These are observed or root-agent-reported integration results before the current final fix wave; they are not a claim that final fixes already passed:
+
+- Full Python suite: 97 passed.
+- Frontend: 18 tests passed and production build passed.
+- Integration E2E: 2 tests passed using a short temporary path, mocked recognition and LLM, with actual FFmpeg and LangGraph execution. This verifies synthetic orchestration/render behavior rather than real recognition or a live model.
+- Actual HTTP smoke: synthetic no-hoop video upload returned 202; worker produced a safe failure and no empty successful result.
+- Browser/CUA: welcome, server config and pre-upload instruction prompt verified. Browser file chooser timed out, so successful browser upload, resulting video playback and combined-edit download were not accepted end to end.
+
+## Final fixes in progress
+
+Worker lifetime locking, pre-render explanation persistence, POSIX descendant process termination and Windows long-path publishing are being fixed and tested. Final full Python/frontend/integration reruns and review remain pending. No final-fix success is claimed here.
+
+## Remaining acceptance and evidence boundaries
+
+No live LLM key has been supplied and no real authorized basketball acceptance sample is available. The identified source media is a demonstration screen recording. Recognition precision/recall, real sample/device processing time, live model behavior/cost and full successful browser upload → highlight → combined edit → playback/download remain outstanding. Synthetic tests cannot establish recognition accuracy. External model weights remain server-provisioned and undistributed; GPU and VFR/rotation are not validated. Using a borrowed detector virtualenv is not evidence of a clean installation of all application dependencies.
+
+P3 is only partially verified. Local usage documentation and final acceptance reporting are being updated in parallel; do not treat the integrated code or checked P0/P1/P2 implementation items as completion of v0.4 S4 real-browser acceptance. No production deployment or scope extension is included.
