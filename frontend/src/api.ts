@@ -14,6 +14,7 @@ export interface Message {
   role: "user" | "assistant" | "status";
   text: string;
   created_at?: string;
+  request_id?: string | null;
 }
 export interface Job {
   id: string;

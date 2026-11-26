@@ -208,3 +208,87 @@ test("IME Enter does not submit an unfinished Chinese instruction", async () => 
   ).not.toBeInTheDocument();
   expect(screen.getByRole("textbox")).toHaveValue("去掉第二球");
 });
+
+test("lost edit response survives progress and refresh with the same mutation UUID", async () => {
+  localStorage.setItem(
+    "basketball-session",
+    JSON.stringify({ id: "one", token: "secret" }),
+  );
+  mock.send
+    .mockRejectedValueOnce(new Error("响应丢失"))
+    .mockResolvedValueOnce({ status: "completed" })
+    .mockResolvedValueOnce({ status: "queued" });
+  const view = render(<App />);
+  await screen.findByRole("link", { name: "下载集锦" });
+  await userEvent.type(screen.getByRole("textbox"), "每球前面多留三秒");
+  await userEvent.click(screen.getByRole("button", { name: "发送" }));
+  await screen.findByText(/响应丢失/);
+  const original = mock.send.mock.calls[0][1].request_id;
+  await userEvent.clear(screen.getByRole("textbox"));
+  await userEvent.type(screen.getByRole("textbox"), "查看进度");
+  await userEvent.click(screen.getByRole("button", { name: "发送" }));
+  await waitFor(() => expect(mock.send).toHaveBeenCalledTimes(2));
+  await waitFor(() =>
+    expect(
+      JSON.parse(localStorage.getItem("basketball-session")!).pending
+        ?.request_id,
+    ).toBe(original),
+  );
+  await waitFor(() => expect(screen.getByRole("textbox")).toHaveValue(""));
+  expect(mock.send.mock.calls[1][1].request_id).not.toBe(original);
+  view.unmount();
+  render(<App />);
+  await screen.findByRole("link", { name: "下载集锦" });
+  expect(screen.getByRole("textbox")).toHaveValue("每球前面多留三秒");
+  await userEvent.click(screen.getByRole("button", { name: "发送" }));
+  await waitFor(() => expect(mock.send).toHaveBeenCalledTimes(3));
+  expect(mock.send.mock.calls[2][1].request_id).toBe(original);
+});
+test("unresolved mutation blocks other mutations but progress remains available", async () => {
+  localStorage.setItem(
+    "basketball-session",
+    JSON.stringify({
+      id: "one",
+      token: "secret",
+      pending: { request_id: "pending-edit", text: "每球前面多留三秒" },
+    }),
+  );
+  render(<App />);
+  await screen.findByRole("link", { name: "下载集锦" });
+  await userEvent.clear(screen.getByRole("textbox"));
+  await userEvent.type(screen.getByRole("textbox"), "去掉第二球");
+  expect(screen.getByRole("button", { name: "发送" })).toBeDisabled();
+  fireEvent.keyDown(screen.getByRole("textbox"), { key: "Enter" });
+  expect(mock.send).not.toHaveBeenCalled();
+  expect(
+    JSON.parse(localStorage.getItem("basketball-session")!).pending.request_id,
+  ).toBe("pending-edit");
+});
+test("durable message request id resolves a previously unacknowledged mutation", async () => {
+  localStorage.setItem(
+    "basketball-session",
+    JSON.stringify({
+      id: "one",
+      token: "secret",
+      pending: { request_id: "accepted-edit", text: "每球前面多留三秒" },
+    }),
+  );
+  mock.messages.mockResolvedValue({
+    messages: [
+      {
+        id: "saved-message",
+        role: "user",
+        text: "每球前面多留三秒",
+        request_id: "accepted-edit",
+      },
+    ],
+  });
+  render(<App />);
+  await screen.findByText("每球前面多留三秒");
+  await waitFor(() =>
+    expect(
+      JSON.parse(localStorage.getItem("basketball-session")!).pending,
+    ).toBeUndefined(),
+  );
+  expect(screen.getByRole("textbox")).toHaveValue("");
+});

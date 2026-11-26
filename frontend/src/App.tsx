@@ -125,6 +125,21 @@ export default function App() {
     };
   }, [session?.id, session?.token, uploading, refresh]);
   useEffect(() => {
+    const pending = session?.pending;
+    if (
+      !pending ||
+      !messages.some(
+        (m) => m.role === "user" && m.request_id === pending.request_id,
+      )
+    )
+      return;
+    // A persisted user message proves the server durably accepted this request.
+    const clean = { id: session.id, token: session.token };
+    save(clean);
+    setSession(clean);
+    setText((value) => (value.trim() === pending.text ? "" : value));
+  }, [messages, session]);
+  useEffect(() => {
     end.current?.scrollIntoView?.({ block: "nearest", behavior: "auto" });
   }, [messages.length, local.length, job?.status]);
   function note(message: string) {
@@ -208,7 +223,13 @@ export default function App() {
       return;
     }
     if (unavailable) return;
-    if (busy && value !== "查看进度") {
+    const isProgress = value === "查看进度";
+    const isRetry = session.pending?.text === value;
+    if (session.pending && !isProgress && !isRetry) {
+      note("上一条剪辑指令尚未确认。请重发原指令，或查看进度后等待消息恢复。");
+      return;
+    }
+    if (busy && !isProgress && !isRetry) {
       note("正在处理视频，完成后再修改。你可以输入“查看进度”。");
       return;
     }
@@ -216,7 +237,7 @@ export default function App() {
       session.pending?.text === value
         ? session.pending
         : { request_id: crypto.randomUUID(), text: value };
-    const next = { ...session, pending: body };
+    const next = isProgress ? session : { ...session, pending: body };
     save(next);
     setSession(next);
     const version = generation.current,
@@ -227,16 +248,28 @@ export default function App() {
     try {
       const result = await api.send(next, body, c.signal);
       if (version !== generation.current) return;
-      const clean = { id: next.id, token: next.token };
-      save(clean);
-      setSession(clean);
+      // Progress never replaces or clears an unresolved mutation.
+      setSession((current) => {
+        if (!current || current.id !== next.id) return current;
+        const clean =
+          !isProgress && current.pending?.request_id === body.request_id
+            ? { id: current.id, token: current.token }
+            : current;
+        save(clean);
+        return clean;
+      });
       setText("");
       if (result.status === "queued")
         setJob((j) => (j ? { ...j, status: "queued" } : j));
       setRefresh((v) => v + 1);
     } catch (e) {
       if (!c.signal.aborted && version === generation.current)
-        setError(reason(e) + " 再次发送会复用本次请求，不重复调整时长。");
+        setError(
+          reason(e) +
+            (isProgress
+              ? " 请重试查看进度。"
+              : " 再次发送会复用本次请求，不重复调整时长。"),
+        );
     } finally {
       if (version === generation.current) setSending(false);
     }
@@ -377,6 +410,19 @@ export default function App() {
                 </button>
               </div>
             )}
+            {session?.pending && (
+              <div className="notice" role="status">
+                上一条剪辑指令尚未确认，可重发原指令或查看进度。确认前暂不接受其他修改。
+                <button
+                  onClick={() => {
+                    setText(session.pending!.text);
+                    field.current?.focus();
+                  }}
+                >
+                  重发原指令
+                </button>
+              </div>
+            )}
             {error && (
               <div className="error" role="alert">
                 {error}
@@ -437,7 +483,7 @@ export default function App() {
                   key={e}
                   disabled={
                     (e === "去掉第二球" && !job?.result) ||
-                    (busy && e !== "查看进度")
+                    ((busy || !!session?.pending) && e !== "查看进度")
                   }
                   onClick={() => {
                     setText(e);
@@ -487,7 +533,9 @@ export default function App() {
                   !text.trim() ||
                   sending ||
                   unavailable ||
-                  (busy && text.trim() !== "查看进度")
+                  ((busy || !!session?.pending) &&
+                    text.trim() !== "查看进度" &&
+                    text.trim() !== session?.pending?.text)
                 }
               >
                 {sending ? "发送中" : "发送"}
