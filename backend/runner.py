@@ -2,6 +2,7 @@
 
 import json
 import sys
+import time
 from pathlib import Path
 from .errors import public_error
 
@@ -13,8 +14,14 @@ def main():
         args[key] = Path(args[key])
 
     def on_stage(stage):
-        if stage in ("analyzing", "rendering"):
-            stage_path.write_text(stage, encoding="utf8")
+        status = stage.get("status") if isinstance(stage, dict) else stage
+        if status in ("analyzing", "rendering"):
+            temporary = stage_path.with_suffix(".tmp")
+            temporary.write_text(json.dumps(stage, ensure_ascii=False), encoding="utf8")
+            temporary.replace(stage_path)
+            # The worker acknowledges only after committing the status message.
+            while stage_path.exists():
+                time.sleep(0.01)
 
     args["on_stage"] = on_stage
     try:

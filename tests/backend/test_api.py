@@ -150,14 +150,14 @@ def test_dedupe_busy_progress_range_and_failure_retention(tmp_path):
         assert any(m["role"] == "status" and m["request_id"] == "p" for m in messages)
 
 
-def test_restart_interruption_and_expiry_cleanup(tmp_path):
+def test_api_restart_preserves_active_worker_and_expiry_cleanup(tmp_path):
     app = make_app(tmp_path)
     with TestClient(app) as c:
         jid, h, _ = upload(c)
         app.state.store.claim()
     other = make_app(tmp_path)
     with TestClient(other) as c:
-        assert c.get(f"/api/jobs/{jid}", headers=h).json()["status"] == "interrupted"
+        assert c.get(f"/api/jobs/{jid}", headers=h).json()["status"] == "analyzing"
         active, ah, _ = upload(c)
         other.state.store.claim()
         with other.state.store.connect() as db:
@@ -166,7 +166,8 @@ def test_restart_interruption_and_expiry_cleanup(tmp_path):
         sentinel.write_text("keep")
         assert c.get(f"/api/jobs/{jid}", headers=h).status_code == 404
         assert other.state.store.cleanup() == 1
-        assert sentinel.exists() and (tmp_path / "tasks" / active).exists()
+        assert sentinel.exists() and (tmp_path / "tasks" / jid).exists()
+        assert not (tmp_path / "tasks" / active).exists()
 
 
 def test_expired_queued_task_is_cleaned_but_running_task_survives(tmp_path):

@@ -189,7 +189,8 @@ def test_initial_upload_calls_no_model_and_uses_real_stages(tmp_path):
     initial=state(tmp_path)
     initial['on_stage']=stages.append
     result=graph.invoke(initial)
-    assert stages==['analyzing','rendering']
+    assert stages[0] == 'analyzing'
+    assert stages[1]['status'] == 'rendering'
     assert result['plan']==EditPlan().model_dump()
 
 
@@ -197,3 +198,20 @@ def test_invalid_base_url_has_clear_configuration_error():
     interpreter=OpenAIInterpreter(base_url='https://[bad',api_key='secret',model='model')
     with pytest.raises(RuntimeError,match='模型服务未配置'):
         interpreter('前面八秒',events=EVENTS,plan=EditPlan(),displayed_event_ids=['e1'])
+
+
+def test_summary_arrives_before_renderer(tmp_path):
+    stages = []
+    def render(video, events, plan, output):
+        summary = stages[-1]
+        assert summary['status'] == 'rendering'
+        assert summary['excluded_event_ids'] == ['e2']
+        assert summary['excluded_ordinals'] == [2]
+        assert summary['before_seconds'] == 8 and summary['after_seconds'] == 2
+        assert all(s in summary['message'] for s in ('第 2 球', 'e2', '前 8 秒', '后 2 秒'))
+        return RenderResult(path=str(output), duration_seconds=10, event_ids=['e1','e3'])
+    graph = create_graph(interpreter=lambda *a, **k: Interpretation(status='apply', operations=[
+        Operation(op='exclude',ordinal=2), Operation(op='add_before',value=3)]), renderer=render)
+    initial = state(tmp_path)
+    initial.update(events=[e.model_dump() for e in EVENTS], displayed_event_ids=['e1','e2','e3'], text='修改', on_stage=stages.append)
+    graph.invoke(initial)

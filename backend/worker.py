@@ -3,6 +3,8 @@
 import json
 import os
 import secrets
+import signal
+from contextlib import contextmanager
 import subprocess
 import sys
 import time
@@ -12,22 +14,52 @@ from .store import Store
 from .errors import public_error
 
 
+PROCESS_PLATFORM = os.name
+
+
 class Worker:
     def __init__(self, store, *, executor=None):
         self.store = store
         self.executor = executor
 
+    @contextmanager
+    def startup(self):
+        # Hold the OS lock for the full process lifetime, including recovery.
+        with (self.store.root / "worker.lock").open("a+b") as lock:
+            lock.seek(0)
+            if os.name == "nt":
+                import msvcrt
+                try:
+                    msvcrt.locking(lock.fileno(), msvcrt.LK_NBLCK, 1)
+                except OSError as error:
+                    raise RuntimeError("另一个工作进程正在运行") from error
+            else:
+                import fcntl
+                try:
+                    fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                except OSError as error:
+                    raise RuntimeError("另一个工作进程正在运行") from error
+            try:
+                self.store.interrupt()
+                yield
+            finally:
+                lock.seek(0)
+                if os.name == "nt":
+                    msvcrt.locking(lock.fileno(), msvcrt.LK_UNLCK, 1)
+                else:
+                    fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
+
     def stage(self, jid, stage):
-        if stage not in ("analyzing", "rendering"):
+        summary = stage if isinstance(stage, dict) else {}
+        status = summary.get("status") if summary else stage
+        if status not in ("analyzing", "rendering"):
             return
+        message = summary.get("message") or (
+            "正在分析视频" if status == "analyzing" else "正在生成集锦"
+        )
         with self.store.connect() as db:
-            db.execute("UPDATE jobs SET status=? WHERE id=?", (stage, jid))
-            self.store.message(
-                db,
-                jid,
-                "status",
-                "正在分析视频" if stage == "analyzing" else "正在生成集锦",
-            )
+            db.execute("UPDATE jobs SET status=? WHERE id=?", (status, jid))
+            self.store.message(db, jid, "status", message)
 
     def execute(self, args):
         if self.executor is not None:
@@ -35,7 +67,7 @@ class Worker:
         work = args["work_dir"]
         input_path = work / "execution.json"
         output_path = work / "execution-result.json"
-        stage_path = work / "execution-stage.txt"
+        stage_path = work / "execution-stage.json"
         serial = {
             k: (str(v) if isinstance(v, Path) else v)
             for k, v in args.items()
@@ -53,19 +85,22 @@ class Worker:
             ],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
+            start_new_session=PROCESS_PLATFORM != "nt",
         )
         deadline = time.monotonic() + self.store.settings.execution_timeout_seconds
-        last_stage = None
         try:
             while proc.poll() is None:
                 if time.monotonic() >= deadline:
                     raise TimeoutError("处理超时，请稍后重新提交要求")
                 if stage_path.exists():
-                    stage = stage_path.read_text(encoding="utf8").strip()
-                    if stage != last_stage:
-                        args["on_stage"](stage)
-                        last_stage = stage
+                    stage = json.loads(stage_path.read_text(encoding="utf8"))
+                    args["on_stage"](stage)
+                    # Removing the event acknowledges its committed message.
+                    stage_path.unlink()
                 time.sleep(0.1)
+            if stage_path.exists():
+                args["on_stage"](json.loads(stage_path.read_text(encoding="utf8")))
+                stage_path.unlink()
             if proc.returncode or not output_path.exists():
                 raise RuntimeError("处理失败，请检查模型配置及视频后重试")
             output = json.loads(output_path.read_text(encoding="utf8"))
@@ -74,7 +109,7 @@ class Worker:
             return output
         finally:
             if proc.poll() is None:
-                if os.name == "nt":
+                if PROCESS_PLATFORM == "nt":
                     subprocess.run(
                         ["taskkill", "/PID", str(proc.pid), "/T", "/F"],
                         stdout=subprocess.DEVNULL,
@@ -82,7 +117,10 @@ class Worker:
                         check=False,
                     )
                 else:
-                    proc.kill()
+                    try:
+                        os.killpg(proc.pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
                 proc.wait(timeout=10)
             for path in (input_path, output_path, stage_path):
                 path.unlink(missing_ok=True)
@@ -169,14 +207,14 @@ def main():
     from .app import Settings
 
     store = Store(Settings())
-    store.interrupt()
     worker = Worker(store)
-    try:
-        while True:
-            if not worker.run_once():
-                time.sleep(0.5)
-    except KeyboardInterrupt:
-        return
+    with worker.startup():
+        try:
+            while True:
+                if not worker.run_once():
+                    time.sleep(0.5)
+        except KeyboardInterrupt:
+            return
 
 
 if __name__ == "__main__":

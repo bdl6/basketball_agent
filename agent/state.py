@@ -13,7 +13,7 @@ class AgentState(TypedDict, total=False):
     displayed_event_ids: list[str]
     text: str | None
     pending_context: dict | None
-    on_stage: Callable[[str], None]
+    on_stage: Callable[[str | dict], None]
     interpretation: Any
     result_path: str | None
     message: str

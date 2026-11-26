@@ -45,16 +45,28 @@ def _run(command: list[str]) -> None:
         raise RuntimeError(f'FFmpeg 视频剪辑或校验失败: {completed.stderr[-2000:]}')
 
 
+def _native_path(path: Path) -> Path:
+    """Use extended Windows paths for filesystem calls beyond MAX_PATH."""
+    if os.name != 'nt':
+        return path
+    text = path.as_posix()
+    if text.startswith('//?/'):
+        return path
+    if text.startswith('//'):
+        return Path('//?/UNC/' + text[2:])
+    return Path('//?/' + text)
+
+
 def render_highlights(video_path: Path, events: Sequence[Event], plan: EditPlan, output_path: Path) -> RenderResult:
     video_path, output_path = Path(video_path).resolve(), Path(output_path).resolve()
     if video_path == output_path:
         raise ValueError('输出不能覆盖原视频')
-    if output_path.exists():
+    if _native_path(output_path).exists():
         raise FileExistsError(f'输出已存在: {output_path}')
     meta = inspect_video(video_path)
     intervals, event_ids = build_intervals(events, plan, meta['duration'])
     duration = sum(end - start for start, end in intervals)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
+    _native_path(output_path.parent).mkdir(parents=True, exist_ok=True)
     temporary = output_path.with_name(f'.{output_path.stem}-{uuid.uuid4().hex}.tmp.mp4')
     filters, labels = [], []
     offset = meta.get('video_start', 0) - meta.get('audio_start', 0)
@@ -92,7 +104,7 @@ def render_highlights(video_path: Path, events: Sequence[Event], plan: EditPlan,
             raise RuntimeError('导出视频音频校验失败')
         _run(['ffmpeg', '-v', 'error', '-xerror', '-i', str(temporary), '-f', 'null', '-'])
         # Same-directory hard link publishes a verified file atomically and refuses overwrite.
-        os.link(temporary, output_path)
+        os.link(_native_path(temporary), _native_path(output_path))
         return RenderResult(path=str(output_path), duration_seconds=float(video['duration']), event_ids=event_ids)
     finally:
-        temporary.unlink(missing_ok=True)
+        _native_path(temporary).unlink(missing_ok=True)

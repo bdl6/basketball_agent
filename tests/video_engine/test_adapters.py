@@ -159,3 +159,24 @@ def test_import_does_not_load_heavy_detector_or_annotator_dependencies():
     subprocess.run([sys.executable, '-c',
                     "import video_engine, sys; assert not {'cv2', 'torch', 'ultralytics', 'basketball_detect.render'}.intersection(sys.modules)"],
                    check=True, capture_output=True)
+
+
+@pytest.mark.skipif(__import__('os').name != 'nt', reason='Windows long paths')
+def test_render_publishes_long_windows_path_and_cleans_temporary(tmp_path):
+    source = tmp_path / 'source.mp4'
+    make_source(source, False)
+    nested = tmp_path
+    while len(str(nested)) < 280:
+        nested = nested / ('nested-' + 'x' * 30)
+    native = Path('//?/' + str(nested))
+    native.mkdir(parents=True)
+    destination = nested / 'result.mp4'
+    result = render_highlights(source, [event('one', 1)], EditPlan(), destination)
+    assert result.path == str(destination.resolve())
+    published = native / 'result.mp4'
+    assert published.stat().st_size > 0
+    assert not list(native.glob('.*.tmp.mp4'))
+    original = published.read_bytes()
+    with pytest.raises(FileExistsError):
+        render_highlights(source, [event('one',1)], EditPlan(), destination)
+    assert published.read_bytes() == original

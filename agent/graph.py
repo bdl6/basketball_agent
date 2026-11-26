@@ -69,9 +69,22 @@ def create_graph(*, interpreter=None, analyzer=None, renderer=None):
         return {'plan': updated.model_dump(), 'pending_context': None}
 
     def render(state):
-        state['on_stage']('rendering')
         plan = EditPlan.model_validate(state['plan'])
         events = [Event.model_validate(e) for e in state['events']]
+        displayed = state['displayed_event_ids']
+        excluded = plan.excluded_event_ids
+        ordinals = [i for i, eid in enumerate(displayed, 1) if eid in excluded]
+        details = '、'.join(f'第 {i} 球（{displayed[i - 1]}）' for i in ordinals)
+        prior = [eid for eid in excluded if eid not in displayed]
+        message = f'已理解要求：每球前 {plan.before_seconds:g} 秒、后 {plan.after_seconds:g} 秒。'
+        if details:
+            message += f'将排除{details}。'
+        if prior:
+            message += f'继续排除进球 ID：{"、".join(prior)}。'
+        message += '正在生成新集锦。'
+        state['on_stage']({'status': 'rendering', 'message': message,
+            'excluded_event_ids': excluded, 'excluded_ordinals': ordinals,
+            'before_seconds': plan.before_seconds, 'after_seconds': plan.after_seconds})
         output = Path(state['work_dir']) / f'highlights-{uuid4().hex}.mp4'
         result = renderer(state['video_path'], events, plan, output)
         message = f'集锦已生成：共 {len(result.event_ids)} 个可靠进球，每球前 {plan.before_seconds:g} 秒、后 {plan.after_seconds:g} 秒。'
@@ -95,7 +108,7 @@ def create_graph(*, interpreter=None, analyzer=None, renderer=None):
 
 def execute_job(video_path: Path, work_dir: Path, *, model_path: Path, events: list[dict] | None,
                 plan: dict, displayed_event_ids: list[str], text: str | None,
-                pending_context: dict | None = None, on_stage: Callable[[str], None]) -> dict:
+                pending_context: dict | None = None, on_stage: Callable[[str | dict], None]) -> dict:
     result = create_graph().invoke({'video_path': Path(video_path), 'work_dir': Path(work_dir),
         'model_path': Path(model_path), 'events': events, 'plan': plan,
         'displayed_event_ids': displayed_event_ids, 'text': text,

@@ -42,12 +42,16 @@ These are observed or root-agent-reported integration results before the current
 - Actual HTTP smoke: synthetic no-hoop video upload returned 202; worker produced a safe failure and no empty successful result.
 - Browser/CUA: welcome, server config and pre-upload instruction prompt verified. Browser file chooser timed out, so successful browser upload, resulting video playback and combined-edit download were not accepted end to end.
 
-## Final fixes in progress
+## Final implementation verification
 
-Worker lifetime locking, pre-render explanation persistence, POSIX descendant process termination and Windows long-path publishing are being fixed and tested. Final full Python/frontend/integration reruns and review remain pending. No final-fix success is claimed here.
+Worker lifetime locking, pre-render explanation persistence with acknowledgement, POSIX descendant process termination and Windows extended-path publishing are implemented. The controller inspected the fix paths and regression tests after the independent whole-branch review identified these issues. The final independent scoped re-review could not run because the delegated agents reached their usage limit; this is a review limitation, not a test failure.
+
+Final command: `.venv/Scripts/python.exe -m pytest -q --basetemp=runs/final-verification` — 106 passed, one installed Starlette/httpx deprecation warning, 18.23 seconds. This included nested-path cross-module tests and the explicit >280-character Windows publication regression. Frontend was independently rerun after its last code change: 18 tests passed; production build passed. `git diff --check` passed.
+
+Cross-module verification exercised initial two-event highlights, combined removal/relative adjustment, analysis call count of one, real H.264/AAC output, authenticated Range downloads, prospective explanation persisted before rendering, and preserving the previous movie/plan when a later render fails. Recognition and LLM HTTP responses in this success test were simulated. A real worker subprocess also reported missing-model failure correctly. No live model or real basketball success is claimed.
 
 ## Remaining acceptance and evidence boundaries
 
 No live LLM key has been supplied and no real authorized basketball acceptance sample is available. The identified source media is a demonstration screen recording. Recognition precision/recall, real sample/device processing time, live model behavior/cost and full successful browser upload → highlight → combined edit → playback/download remain outstanding. Synthetic tests cannot establish recognition accuracy. External model weights remain server-provisioned and undistributed; GPU and VFR/rotation are not validated. Using a borrowed detector virtualenv is not evidence of a clean installation of all application dependencies.
 
-P3 is only partially verified. Local usage documentation and final acceptance reporting are being updated in parallel; do not treat the integrated code or checked P0/P1/P2 implementation items as completion of v0.4 S4 real-browser acceptance. No production deployment or scope extension is included.
+P3 is only partially verified. Local usage instructions are complete in README; do not treat the integrated code or checked P0/P1/P2 implementation items as completion of v0.4 S4 real-browser acceptance. No production deployment or scope extension is included.

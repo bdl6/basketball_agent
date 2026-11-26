@@ -10,7 +10,6 @@ import os
 import secrets
 import shutil
 import subprocess
-from contextlib import asynccontextmanager
 from pathlib import Path
 from fastapi import FastAPI, File, Header, HTTPException, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
@@ -66,12 +65,7 @@ def create_app(settings=None, *, probe=probe_duration, executor=None):
     settings = settings or Settings()
     store = Store(settings)
 
-    @asynccontextmanager
-    async def lifespan(app):
-        store.interrupt()
-        yield
-
-    app = FastAPI(lifespan=lifespan)
+    app = FastAPI()
     app.state.settings = settings
     app.state.store = store
     from .worker import Worker
