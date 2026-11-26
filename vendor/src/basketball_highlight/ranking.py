@@ -19,21 +19,26 @@ def candidate_priority(candidate):
     )
 
 
-def dedupe_candidates(candidates, dedupe_seconds):
+def dedupe_candidates(candidates, dedupe_seconds, preserve_evidence=False):
     ordered = sorted(candidates, key=lambda item: float(item["time"]))
     if not ordered:
         return []
     deduped = []
     cluster_start = float(ordered[0]["time"])
     winner = ordered[0]
+    observations = list(winner.get("observations", [winner]))
+    def retained():
+        return {**winner, "observations": observations} if preserve_evidence else winner
     for candidate in ordered[1:]:
         candidate_time = float(candidate["time"])
         if candidate_time - cluster_start <= dedupe_seconds:
+            observations.extend(candidate.get("observations", [candidate]))
             if candidate_priority(candidate) > candidate_priority(winner):
                 winner = candidate
             continue
-        deduped.append(winner)
+        deduped.append(retained())
         cluster_start = candidate_time
         winner = candidate
-    deduped.append(winner)
+        observations = list(candidate.get("observations", [candidate]))
+    deduped.append(retained())
     return deduped

@@ -57,8 +57,28 @@ def recompute_checks(matches: list[dict], output: dict) -> list[dict]:
             checks.append(skipped_result(result.get("reason", "check_failed") if isinstance(result, dict) else "check_failed"))
         else:
             checks.append(assess_rim_crossing(result["frames"], rim, result.get("net_motion_series")))
-    return [keep_unless_seen(check, refined=not match.get("coarse_crossing"))
-            for match, check in zip(matches, apply_video_occlusion(checks))]
+    # Overlapping refinement windows contain repeated observations of one
+    # crossing. They must not count as independent camera-calibration samples.
+    groups = []
+    for index in sorted(range(len(matches)), key=lambda i: float(matches[i]["time"])):
+        if groups and float(matches[index]["time"]) - float(matches[groups[-1][0]]["time"]) <= .8:
+            groups[-1].append(index)
+        else:
+            groups.append([index])
+    unique = []
+    for group in groups:
+        variants = [checks[i] for i in group]
+        if len({(c.get("status"), c.get("reason")) for c in variants}) > 1:
+            unique.append(skipped_result("hypothesis_conflict"))
+        else:
+            unique.append(dict(variants[0]))
+    calibrated = apply_video_occlusion(unique)
+    final = [None] * len(matches)
+    for group, check in zip(groups, calibrated):
+        for index in group:
+            result = keep_unless_seen(check, refined=not matches[index].get("coarse_crossing"))
+            final[index] = {**result, "observations": [checks[i] for i in group]}
+    return final
 
 
 def analyze(config: DetectConfig, run_dir: Path, *, stage_runner=run_stage, metadata=None) -> AnalysisResult:

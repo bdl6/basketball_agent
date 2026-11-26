@@ -1175,4 +1175,4 @@ def find_refined_crossings(
                 candidates.append(candidate)
                 break
 
-    return dedupe_candidates(candidates, dedupe_sec)
+    return dedupe_candidates(candidates, dedupe_sec, preserve_evidence=True)

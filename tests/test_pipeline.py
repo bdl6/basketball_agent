@@ -51,3 +51,33 @@ def test_raw_rim_detections_are_recomputed_before_automatic_confirmation():
     checks = recompute_checks([match], {'results': [{'status': 'rejected', 'frames': frames}]})
     assert checks[0]['status'] == 'made'  # Cached status is deliberately wrong.
     assert classify_events([match], checks)[0]['label'] == 'made'
+
+
+def test_overlapping_windows_do_not_inflate_occlusion_calibration():
+    rim = {'center_x': 160, 'rim_y': 80, 'width': 50, 'height': 20}
+    matches, results = [], []
+    # Only four physical events: below the eight-unique-event calibration floor.
+    for repetition in range(2):
+        for event in range(4):
+            frames = []
+            for step in range(16):
+                cx = 160 + (.3 - .5 * step / 15) * 50
+                cy = 80 + (-1.5 + step*.25)*50
+                frames.append([] if event == 3 and step in {6,7} else [{'name':'ball','confidence':.85,
+                    'xyxy':[cx-12.5,cy-12.5,cx+12.5,cy+12.5]}])
+            matches.append({'time':event*3+1,'verdict':'made','overlay':{'rim':rim}})
+            results.append({'frames':frames})
+    checks = recompute_checks(matches, {'results':results})
+    assert all(check['status'] != 'made' for check in checks[:3])
+    assert checks[3]['status'] == 'made'
+
+
+def test_thin_net_calibration_without_motion_measurements_stays_uncertain():
+    rim = {'center_x':160,'rim_y':80,'width':50,'height':20}
+    frames = []
+    for i in range(16):
+        cy = 80 + (-1.5+i*.25)*50
+        frames.append([{'name':'ball','confidence':.85,'xyxy':[147.5,cy-12.5,172.5,cy+12.5]}])
+    matches = [{'time':i*3+1,'verdict':'made','overlay':{'rim':rim}} for i in range(8)]
+    checks = recompute_checks(matches, {'results':[{'frames':frames} for _ in matches]})
+    assert all(c['status'] == 'unsure' for c in checks)

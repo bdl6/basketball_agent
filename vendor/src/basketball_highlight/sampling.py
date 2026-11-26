@@ -42,12 +42,8 @@ def canonical_sample_times(
     if start_seconds < 0 or end_seconds <= start_seconds or sample_fps <= 0:
         raise ValueError("SAMPLE_PARAMETERS_INVALID")
 
-    start_ms = round_time_ms(start_seconds * 1000.0)
-    end_ms = round_time_ms(end_seconds * 1000.0)
-    duration_ms = end_ms - start_ms
-    count = max(1, math.ceil(duration_ms * sample_fps / 1000.0 - 1e-9))
-    times_ms = [
-        start_ms + round_time_ms(index * 1000.0 / sample_fps)
-        for index in range(count)
-    ]
-    return [time_ms / 1000.0 for time_ms in times_ms if time_ms < end_ms] or [start_ms / 1000.0]
+    # Keep full precision until a source frame is selected. Millisecond
+    # rounding before ceil loses native-rate frames (e.g. 2/30 -> .067 -> 3).
+    count = max(1, math.ceil((end_seconds - start_seconds) * sample_fps - 1e-9))
+    return [start_seconds + index / sample_fps for index in range(count)
+            if start_seconds + index / sample_fps < end_seconds]

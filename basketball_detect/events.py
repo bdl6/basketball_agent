@@ -5,9 +5,10 @@ import math
 def collect_matches(refined: dict) -> list[dict]:
     matches = []
     for item in refined["results"]:
-        if item["refined"]:
-            matches.extend(item["refined"])
-        else:
+        observations = [observation for match in item["refined"] for observation in match.get("observations", [match])]
+        matches.extend(observations)
+        coarse = item.get("coarse")
+        if coarse and not any(abs(float(m["time"]) - float(coarse["time"])) <= .8 for m in observations):
             matches.append({
                 **item["coarse"], "verdict": "ambiguous", "coarse_crossing": True,
                 "overlay": {"rim": item.get("rim_local", item.get("rim_original")),
@@ -30,7 +31,7 @@ def classify_events(matches: list[dict], rim_checks: list[dict]) -> list[dict]:
             label, reason = "made", "trajectory_and_rim_agree"
         elif (positive and status == "rejected") or (negative and status == "made"):
             label, reason = "uncertain", "conflicting_evidence"
-        elif negative and status == "rejected":
+        elif status == "rejected" and not positive:
             label, reason = "missed", check.get("reason") or "negative_evidence"
         else:
             label, reason = "uncertain", check.get("reason") or "insufficient_evidence"

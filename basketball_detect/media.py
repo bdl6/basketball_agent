@@ -32,7 +32,10 @@ def inspect_video(video: Path) -> dict:
     def rate(text):
         numerator, denominator = text.split("/")
         return float(numerator) / float(denominator) if float(denominator) else 0
-    fps = rate(stream.get("avg_frame_rate", "0/0")) or rate(stream.get("r_frame_rate", "0/0"))
+    fps_text = stream.get("avg_frame_rate", "0/0")
+    if not rate(fps_text):
+        fps_text = stream.get("r_frame_rate", "0/0")
+    fps = rate(fps_text)
     duration = float(stream.get("duration") or data["format"].get("duration", 0))
     if fps <= 0 or not math.isfinite(fps) or duration <= 0 or not math.isfinite(duration):
         raise ValueError("视频帧率或时长无效")
@@ -44,6 +47,9 @@ def inspect_video(video: Path) -> dict:
     real_rate = rate(stream.get("r_frame_rate", "0/0"))
     if real_rate and abs(real_rate - fps) / fps > 0.01:
         raise ValueError("首版请先将可变帧率视频转为恒定帧率，避免事件时间偏移")
+    audio = next((s for s in data["streams"] if s["codec_type"] == "audio"), None)
     return {"width": int(stream["width"]), "height": int(stream["height"]),
-            "fps": fps, "duration": duration, "fps_text": stream.get("avg_frame_rate"),
-            "has_audio": any(s["codec_type"] == "audio" for s in data["streams"])}
+            "fps": fps, "duration": duration, "fps_text": fps_text,
+            "video_start": float(stream.get("start_time", 0)),
+            "audio_start": float(audio.get("start_time", 0)) if audio else 0,
+            "has_audio": audio is not None}

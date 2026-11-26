@@ -145,7 +145,7 @@ def scan_video(args):
     scan_duration = (
         frame_count / fps if args.duration is None else min(args.duration, frame_count / fps)
     )
-    sample_times = canonical_sample_times(0.0, scan_duration, args.sample_fps)
+    sample_times = canonical_sample_times(0.0, scan_duration, min(args.sample_fps, fps))
     target_frames = [min(frame_count - 1, first_frame_index(time, fps)) for time in sample_times]
     records = []
     frame_index = 0
@@ -228,7 +228,7 @@ def scan_video(args):
         pending_crops.append(crop)
         pending_meta.append({
             "frame": frame_index,
-            "time": round(sample_times[sample_index] + args.time_offset, 6),
+            "time": round(frame_index / fps + args.time_offset, 6),
         })
         sample_index += 1
         if len(pending_crops) >= args.batch:

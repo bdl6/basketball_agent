@@ -342,7 +342,11 @@ def apply_video_occlusion(results):
             "occlusion_rule": use_rule,
         }
         if not use_rule and result["reason"] in (None, "not_occluded"):
-            still = result.get("net_motion") is not None and result["net_motion"] < MIN_NET_MOTION
-            result.update(status="rejected" if still else "made", reason="net_still" if still else None)
+            motion = result.get("net_motion")
+            if motion is None:
+                result.update(status="unsure", reason="net_motion_unavailable")
+            else:
+                still = motion < MIN_NET_MOTION
+                result.update(status="rejected" if still else "made", reason="net_still" if still else None)
         judged.append(result)
     return judged

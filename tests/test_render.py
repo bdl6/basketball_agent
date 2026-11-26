@@ -28,8 +28,17 @@ def test_trajectory_has_no_future_points_or_links_across_gaps():
 
 
 def test_ball_box_uses_source_coordinates_and_expires():
-    analysis = AnalysisResult(records=[{'time': .1, 'detections': [
+    analysis = AnalysisResult(metadata={'fps': 30}, records=[{'time': .1, 'frame': 3, 'detections': [
         {'name': 'ball', 'confidence': .9, 'xyxy': [100, 200, 110, 210]}]}])
     timeline = OverlayTimeline(analysis, 3)
     assert timeline.at(.1)['balls'] == [[100, 200, 110, 210]]
     assert timeline.at(.5)['balls'] == []
+
+
+def test_detection_box_is_not_projected_onto_adjacent_frames():
+    analysis = AnalysisResult(metadata={'fps': 30}, records=[{'time': .1, 'frame': 3, 'detections': [
+        {'name': 'ball', 'xyxy': [10,20,30,40]}]}])
+    timeline = OverlayTimeline(analysis, 1)
+    assert timeline.at(2/30)['balls'] == []
+    assert timeline.at(3/30)['balls'] == [[10,20,30,40]]
+    assert timeline.at(4/30)['balls'] == []

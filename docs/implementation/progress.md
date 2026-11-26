@@ -17,3 +17,17 @@ Runtime smoke: upstream model successfully loaded on CPU. Actual auto-ROI on a g
 Visual QA: inspected runs/runtime-smoke/overlay-preview.png extracted from a real encoded MP4; Chinese made label and cumulative count legible.
 Ruling: Accept ultralytics >=8.3.225 rather than force an unneeded upgrade to >=8.4; the installed 8.3.225 has loaded and run all inference stages with this model.
 Ruling: Reject rotated metadata and obviously variable-frame-rate input in MVP rather than silently drift source coordinates/timestamps; README gives a normalization command. Full VFR support remains out of scope.
+Final review: independent reviewer reviewed 8b94be1..3dc8f1a read-only; completed review, no re-review requested.
+Final: fixed lost contradictory hypotheses — test_producer_deduplication_preserves_conflicting_hypotheses RED→GREEN.
+Final: fixed duplicate occlusion calibration — test_overlapping_windows_do_not_inflate_occlusion_calibration RED→GREEN.
+Final: fixed missing net-motion evidence promoted to made — test_thin_net_calibration_without_motion_measurements_stays_uncertain RED→GREEN.
+Final: fixed swallowed neighboring coarse seed — test_neighboring_goal_does_not_swallow_unrefined_seed RED→GREEN.
+Final: fixed millisecond sampling frame loss and wrong source timestamps — test_native_rate_sampling_does_not_skip_every_third_frame and actual video scanner/refiner test RED→GREEN.
+Final: fixed detection boxes on unobserved frames — test_detection_box_is_not_projected_onto_adjacent_frames RED→GREEN.
+Final: fixed unreachable witnessed-miss classification — actual source rebound detections through upstream refiner, fallback and dense check tested RED→GREEN; resumed descent with positive/negative conflict correctly remains uncertain.
+Final: fixed audio/video source-start rebasing — frequency/silence tests for both offset directions RED→GREEN.
+Final: fixed invalid fallback rational encoder fps — test_fallback_frame_rate_is_the_rate_given_to_encoder RED→GREEN.
+Final suite: .venv/Scripts/python.exe -m pytest -q --basetemp=runs/test-review-final → 45 passed in 9.77s.
+Final: Ruling: Accept witnessed dense negative evidence with inconclusive refinement, but never override a conflicting made refinement — otherwise real misses dropped by the positive-oriented refiner cannot be displayed; cost is dependence on dense checker evidence quality, to be measured on user footage.
+Final: minor (deferred): explicit null/empty output is not validated early and can cause TypeError; normal/default runs path is supported, README instructs retaining a nonempty directory.
+Final: Ruling: Keep branch and managed worktree as requested by the user; do not merge, push, or clean up this working checkout.

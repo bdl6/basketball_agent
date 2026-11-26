@@ -150,7 +150,7 @@ def scan_window(
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     start_time = max(0.0, center_time - window) if start_time_override is None else max(0.0, start_time_override)
     end_time = min(total_frames / fps, center_time + window) if end_time_override is None else min(total_frames / fps, end_time_override)
-    sample_times = canonical_sample_times(start_time, end_time, sample_fps)
+    sample_times = canonical_sample_times(start_time, end_time, min(sample_fps, fps))
     target_frames = [min(total_frames - 1, first_frame_index(time, fps)) for time in sample_times]
     start_frame = target_frames[0]
     cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
@@ -329,7 +329,7 @@ def scan_window(
         pending_crops.append(crop)
         pending_meta.append({
             "frame": frame_index,
-            "time": sample_times[sample_index],
+            "time": frame_index / fps,
             "net_motion_score": round(net_motion_score, 3),
             "net_changed_ratio": round(net_changed_ratio, 4),
             **zone_values,

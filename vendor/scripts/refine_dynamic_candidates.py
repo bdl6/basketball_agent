@@ -337,7 +337,7 @@ def main(args):
                 {**match, "rim_source": "box_center_fallback"}
                 for match in find_refined_crossings(legacy_records, legacy_rim)
             ]
-        merged = dedupe_candidates(tagged_matches, 2.0)
+        merged = dedupe_candidates(tagged_matches, 2.0, preserve_evidence=True)
         matches = [match for match in merged if match.get("score", 0.0) >= args.min_score]
         # 精化验证失败(轨迹串联不出穿框)的候选:把已扫出的高清球检测
         # 从粗扫 above 真检测出发，以筐宽归一化门限双向关联成

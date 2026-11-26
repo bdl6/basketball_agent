@@ -1,7 +1,6 @@
 """Draw source-coordinate evidence and export a full-length H.264 video."""
-from bisect import bisect_left, bisect_right
+from bisect import bisect_right
 from functools import lru_cache
-import math
 import os
 from pathlib import Path
 import subprocess
@@ -26,7 +25,8 @@ class OverlayTimeline:
         self.event_times = [event["time"] for event in self.events]
         self.goal_times = [event["time"] for event in self.events if event["label"] == "made"]
         self.records = sorted(analysis.records, key=lambda record: record["time"])
-        self.record_times = [record["time"] for record in self.records]
+        self.fps = analysis.metadata.get("fps", 0)
+        self.frame_records = {record["frame"]: record for record in self.records if "frame" in record}
 
     def at(self, timestamp: float) -> dict:
         # Offline verdict may appear 0.25s before crossing; count changes at crossing.
@@ -38,12 +38,9 @@ class OverlayTimeline:
         segments = [((int(a["x"]), int(a["y"])), (int(b["x"]), int(b["y"])))
                     for a, b in zip(points, points[1:]) if 0 < b["time"] - a["time"] <= .2]
         balls = []
-        nearest = bisect_left(self.record_times, timestamp)
-        choices = [i for i in (nearest - 1, nearest) if 0 <= i < len(self.records)]
-        if choices:
-            i = min(choices, key=lambda j: abs(self.record_times[j] - timestamp))
-            if abs(self.record_times[i] - timestamp) <= .075:
-                balls = [d["xyxy"] for d in self.records[i].get("detections", []) if d.get("name") == "ball"]
+        record = self.frame_records.get(round(timestamp * self.fps)) if self.fps else None
+        if record:
+            balls = [d["xyxy"] for d in record.get("detections", []) if d.get("name") == "ball"]
         return {"label": label, "count": bisect_right(self.goal_times, timestamp),
                 "event_id": active.get("id") if active else None,
                 "event_time": active["time"] if active else None,
@@ -113,15 +110,18 @@ def render_video(video: Path, analysis: AnalysisResult, destination: Path, *, fo
     meta = inspect_video(video)
     destination.parent.mkdir(parents=True, exist_ok=True)
     annotator = Annotator(meta["width"], font)
+    analysis.metadata = meta
     timeline = OverlayTimeline(analysis, meta["duration"])
     temporary = destination.with_name(f".{destination.stem}-{uuid.uuid4().hex}.tmp.mp4")
     log_path = destination.parent / "render.log"
     fps = meta["fps_text"] or str(meta["fps"])
+    offset = meta.get("video_start", 0) - meta.get("audio_start", 0)
+    audio_filter = f"asetpts=PTS-STARTPTS,atrim=start={max(0, offset):.9f},asetpts=PTS-STARTPTS,adelay={max(0, -offset)*1000:.6f}:all=1,apad"
     command = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-n", "-f", "rawvideo", "-pix_fmt", "bgr24",
                "-s", f"{meta['width']}x{meta['height']}", "-r", fps, "-i", "pipe:0", "-i", str(video),
                "-map", "0:v:0", "-map", "1:a:0?", "-c:v", "libx264", "-preset", "fast", "-crf", "20",
                "-vf", "pad=ceil(iw/2)*2:ceil(ih/2)*2", "-pix_fmt", "yuv420p", "-c:a", "aac",
-               "-af", "apad", "-shortest", "-movflags", "+faststart", "-map_metadata", "-1", str(temporary)]
+               "-af", audio_filter, "-shortest", "-movflags", "+faststart", "-map_metadata", "-1", str(temporary)]
     cap = cv2.VideoCapture(str(video))
     count = 0
     process = None
