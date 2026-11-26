@@ -7,3 +7,5 @@ Ruling: Source-direct scanning avoids proxy rescaling; slightly slower decoding 
 Task 1: complete — configuration 7 tests passed; CLI help works without loading a model.
 Ruling: Keep vendor/src/basketball_highlight layout to preserve unmodified upstream imports.
 Ruling: pytest temp directory ACLs fail under the Windows sandbox; verification runs use approved execution with explicit worktree-local basetemp.
+Task 2: complete — 20 tests passed across configuration, candidate fallback, conservative evidence agreement, empty candidates, auto-ROI failure and missing checks.
+Ruling: Model/ROI failures are errors; an empty candidate list after a valid hoop is a successful zero-event analysis.
