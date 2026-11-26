@@ -25,7 +25,9 @@ class AnalysisResult:
 
 
 def run_stage(script: str, args: list[str], output: Path, log: Path) -> dict:
-    env = {**os.environ, "PYTHONUTF8": "1", "YOLO_CONFIG_DIR": str(log.parent / "yolo-settings")}
+    settings = log.parent / "yolo-settings"
+    settings.mkdir(parents=True, exist_ok=True)
+    env = {**os.environ, "PYTHONUTF8": "1", "YOLO_CONFIG_DIR": str(settings)}
     command = [sys.executable, str(VENDOR / "scripts" / script), *map(str, args), "--output", str(output)]
     with log.open("w", encoding="utf-8") as handle:
         handle.write(json.dumps(command, ensure_ascii=False) + "\n")
