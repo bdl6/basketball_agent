@@ -32,6 +32,8 @@ const stages: Record<Job["status"], string> = {
   failed: "处理失败",
   interrupted: "处理已中断",
 };
+const jobLabel = (j: Job) => j.status === "completed" && !j.result
+  ? "分析已完成，未生成集锦" : stages[j.status];
 const active = (j: Job | null) =>
   !!j && ["queued", "analyzing", "rendering"].includes(j.status);
 const examples = [
@@ -322,7 +324,7 @@ export default function App() {
           </span>
         </a>
         <span className={"stage " + (busy ? "working" : "")}>
-          {uploading ? "正在上传" : job ? stages[job.status] : "准备好你的好球"}
+          {uploading ? "正在上传" : job ? jobLabel(job) : "准备好你的好球"}
         </span>
       </header>
       <main className="layout">
@@ -426,8 +428,8 @@ export default function App() {
             {job && (
               <div className={"notice " + job.status} role="status">
                 <strong>{["analyzing", "rendering"].includes(job.status)
-                  ? [...messages].reverse().find(m => m.role === "status")?.text || stages[job.status]
-                  : stages[job.status]}</strong>
+                  ? [...messages].reverse().find(m => m.role === "status")?.text || jobLabel(job)
+                  : jobLabel(job)}</strong>
                 {active(job) && <p>完成后会自动更新。处理期间可以查看进度。</p>}
                 {job.error && <p>{job.error}</p>}
                 {job.status === "interrupted" && (

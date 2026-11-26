@@ -310,3 +310,15 @@ test("server pushes completed stages into chat without waiting for polling", asy
     messages:[{id:"stage-1",role:"status",text:"3/6 筛选进球候选：完成"}] }));
   expect(screen.getAllByText("3/6 筛选进球候选：完成").length).toBeGreaterThan(0);
 });
+
+
+test("completed analysis without a movie never claims highlights are ready", async () => {
+  localStorage.setItem("basketball-session", JSON.stringify({id:"one",token:"secret"}));
+  mock.job.mockResolvedValue({...completed,result:null,displayed_event_ids:[]});
+  mock.messages.mockResolvedValue({messages:[{id:"no-goals",role:"assistant",text:"没有可剪辑的可靠进球，未生成集锦"}]});
+  render(<App />);
+  await screen.findByText("没有可剪辑的可靠进球，未生成集锦");
+  expect(screen.queryByText("集锦已就绪")).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("进球集锦播放器")).not.toBeInTheDocument();
+  expect(screen.queryByRole("link",{name:"下载集锦"})).not.toBeInTheDocument();
+});
