@@ -13,6 +13,7 @@ vi.mock("./api", async (importOriginal) => ({
     send: vi.fn(),
     watch: vi.fn(),
     select: vi.fn(),
+    prepareCandidates: vi.fn(),
   },
 }));
 const mock = api as any;
@@ -37,6 +38,7 @@ const completed = {
     revision: "r1",
   },
   error: null,
+  candidate_clips:{e1:{status:"ready",url:"/api/jobs/one/candidates/e1"},e2:{status:"ready",url:"/api/jobs/one/candidates/e2"}},
 };
 beforeEach(() => {
   vi.clearAllMocks();
@@ -46,6 +48,7 @@ beforeEach(() => {
   mock.messages.mockResolvedValue({ messages: [] });
   mock.send.mockResolvedValue({ status: "queued" });
   mock.select.mockResolvedValue({status:"queued"});
+  mock.prepareCandidates.mockResolvedValue({status:"queued"});
 });
 test("welcome and upload guidance render even when service is unavailable", async () => {
   mock.config.mockRejectedValue(new Error("离线"));
@@ -337,9 +340,22 @@ test("likely goals are explicitly marked in the result list", async () => {
 
 test("user can pick an uncertain candidate even when no movie was generated", async () => {
   localStorage.setItem("basketball-session",JSON.stringify({id:"one",token:"secret"}));
-  mock.job.mockResolvedValue({...completed,result:null,displayed_event_ids:[],events:[{id:"u1",time:12,label:"uncertain"}]});
+  mock.job.mockResolvedValue({...completed,result:null,displayed_event_ids:[],events:[{id:"u1",time:12,label:"uncertain"}],candidate_clips:{u1:{status:"ready",url:"/api/jobs/one/candidates/u1"}}});
   render(<App />);
   await userEvent.click(await screen.findByRole("checkbox",{name:/候选 1/}));
   await userEvent.click(screen.getByRole("button",{name:/按选择生成集锦/}));
   expect(mock.select).toHaveBeenCalledWith(expect.objectContaining({id:"one"}),expect.objectContaining({event_ids:["u1"],request_id:expect.any(String)}),expect.any(AbortSignal));
+});
+
+
+test("each candidate plays its own independent clip instead of seeking the source", async () => {
+  localStorage.setItem("basketball-session",JSON.stringify({id:"one",token:"secret"}));
+  mock.job.mockResolvedValue({...completed,candidate_clips:{e1:{status:"ready",url:"/api/jobs/one/candidates/e1"},e2:{status:"ready",url:"/api/jobs/one/candidates/e2"}}});
+  render(<App />);
+  const first=await screen.findByLabelText("候选 1 独立视频");
+  const second=screen.getByLabelText("候选 2 独立视频");
+  expect(first.getAttribute("src")).toContain("/candidates/e1?");
+  expect(second.getAttribute("src")).toContain("/candidates/e2?");
+  expect(first.getAttribute("src")).not.toContain("/source");
+  expect(screen.queryByLabelText("候选原片预览")).not.toBeInTheDocument();
 });

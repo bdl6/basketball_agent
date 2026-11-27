@@ -30,6 +30,7 @@ export interface Job {
   plan: { before_seconds: number; after_seconds: number };
   result: { url: string; download_url: string; revision: string } | null;
   error: string | null;
+  candidate_clips?: Record<string,{status:"ready"|"failed";url?:string;error?:string}>;
 }
 export class ApiError extends Error {
   constructor(
@@ -104,6 +105,7 @@ async function watchProgress(session: Session, receive: (data: ProgressSnapshot)
   if (!signal.aborted) throw new ApiError("进度连接已断开");
 }
 export const api = {
+  prepareCandidates: (s:Session,signal?:AbortSignal) => request<{status:string}>(base(s)+"/candidates",s,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({request_id:crypto.randomUUID()}),signal}),
   select: (s: Session, body: {request_id: string; event_ids: string[]}, signal?: AbortSignal) =>
     request<{status:string}>(base(s)+"/selection",s,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body),signal}),
   watch: watchProgress,
@@ -175,7 +177,10 @@ export function mediaUrl(path: string, session: Session) {
   const url = new URL(path, window.location.origin);
   if (
     url.origin !== window.location.origin ||
-    !["/result", "/source"].some(suffix => url.pathname === "/api/jobs/" + encodeURIComponent(session.id) + suffix)
+    !(["/result", "/source"].some(suffix => url.pathname === "/api/jobs/" + encodeURIComponent(session.id) + suffix)
+      || (url.pathname.startsWith("/api/jobs/"+encodeURIComponent(session.id)+"/candidates/")
+        && url.pathname.slice(("/api/jobs/"+encodeURIComponent(session.id)+"/candidates/").length).length>0
+        && !url.pathname.slice(("/api/jobs/"+encodeURIComponent(session.id)+"/candidates/").length).includes("/")))
   )
     return "";
   url.searchParams.set("token", session.token);

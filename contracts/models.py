@@ -60,6 +60,7 @@ class Job(Contract):
     plan: EditPlan = Field(default_factory=EditPlan)
     result: Result | None = None
     error: str | None = None
+    candidate_clips: dict[str, dict[str, Any]] = Field(default_factory=dict)
 
 
 def highlight_eligible(event: Event) -> bool:

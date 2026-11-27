@@ -69,12 +69,12 @@ export default function App() {
     [replacement, setReplacement] = useState<File | null>(null),
     [refresh, setRefresh] = useState(0);
   const [picks, setPicks] = useState<string[]>([]);
-  const [preview, setPreview] = useState<number | null>(null);
+  const requestedPreviews = useRef(new Set<string>());
   const selectionRequest = useRef<{key:string; id:string} | null>(null);
   const pickKey = JSON.stringify([session?.id,job?.events,job?.displayed_event_ids]);
   useEffect(() => {
     setPicks(job?.displayed_event_ids.length ? job.displayed_event_ids : (job?.events || []).filter(e => ["made","probable"].includes(e.label)).map(e => e.id));
-    setPreview(null);
+
   },[pickKey]);
   const input = useRef<HTMLInputElement>(null),
     field = useRef<HTMLTextAreaElement>(null),
@@ -189,6 +189,15 @@ export default function App() {
       { id: crypto.randomUUID(), role: "assistant", text: message },
     ]);
   }
+  useEffect(() => {
+    if (!session || !job || active(job) || !job.events.some(e=>e.label!=="missed")) return;
+    const candidates=job.events.filter(e=>e.label!=="missed");
+    if (candidates.every(e=>job.candidate_clips?.[e.id]) || requestedPreviews.current.has(session.id)) return;
+    requestedPreviews.current.add(session.id);
+    const c=new AbortController();
+    void api.prepareCandidates(session,c.signal).catch(e=>{if (!c.signal.aborted) setError(reason(e));});
+    return ()=>c.abort();
+  },[session?.id,job?.status,job?.events.length]);
   async function submitSelection() {
     if (!session || busy || !picks.length) return;
     const c = new AbortController();
@@ -492,19 +501,19 @@ export default function App() {
               <article className="result">
                 <h3>选择要保留的进球</h3>
                 <p>确认进球是模型的高置信判断；疑似及不确定事件需要你核对。勾选只影响剪辑，不改变识别结论。</p>
-                <ul className="events">
-                  {job.events.filter(e => e.label !== "missed").map((e,i) => (
-                    <li key={e.id}>
-                      <label><input type="checkbox" aria-label={`候选 ${i+1} ${time(e.time)}`} checked={picks.includes(e.id)} disabled={busy}
-                        onChange={v => setPicks(old => v.target.checked ? [...old,e.id] : old.filter(id => id!==e.id))} />
-                        候选 {i+1} · {time(e.time)} · {e.label==="made"?"模型确认":e.label==="probable"?"疑似进球":"不确定"}</label>
-                      <button type="button" onClick={() => setPreview(e.time)}>预览</button>
-                    </li>))}
-                </ul>
-                {preview !== null && <video key={`${session.id}-${preview}`} aria-label="候选原片预览" controls preload="metadata"
-                  src={mediaUrl(`/api/jobs/${encodeURIComponent(session.id)}/source`,session)}
-                  onLoadedMetadata={e => {e.currentTarget.currentTime=preview;}}
-                  onError={() => setError("原片预览格式不受浏览器支持，可按源时间点选择事件。")}/>}
+                {job.events.some(e=>e.label!=="missed" && !job.candidate_clips?.[e.id]) && <p role="status">正在逐条生成独立候选视频，生成后会自动出现在这里。</p>}
+                {job.events.filter(e => e.label !== "missed" && job.candidate_clips?.[e.id]).sort((a,b)=>a.time-b.time).map((e,i) => {
+                  const clip=job.candidate_clips?.[e.id];
+                  return <article className="candidate-message" key={e.id} aria-label={`候选消息 ${i+1}`}>
+                    <p>好球助手 · 候选 {i+1} · 原片 {time(e.time)} · {e.label==="made"?"模型确认":e.label==="probable"?"疑似进球":"不确定"}</p>
+                    {clip?.status==="ready" && clip.url ? <video aria-label={`候选 ${i+1} 独立视频`} controls preload="none"
+                      src={mediaUrl(clip.url,session)} onError={()=>setError(`候选 ${i+1} 视频播放失败，请刷新重试。`)} />
+                      : <p role="status">{clip?.error || "正在准备这条候选的独立短视频…"}</p>}
+                    <label><input type="checkbox" aria-label={`候选 ${i+1} ${time(e.time)}`} checked={picks.includes(e.id)} disabled={busy}
+                      onChange={v=>setPicks(old=>v.target.checked?[...old,e.id]:old.filter(id=>id!==e.id))}/>保留这条候选</label>
+                  </article>;
+                })}
+                <button type="button" disabled={busy} onClick={()=>void api.prepareCandidates(session).catch(e=>setError(reason(e)))}>重新准备候选短视频</button>
                 <button type="button" className="send" disabled={busy || !picks.length} onClick={() => void submitSelection()}>
                   按选择生成集锦（{picks.length}）</button>
               </article>

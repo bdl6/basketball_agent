@@ -34,6 +34,8 @@ class Store:
 
             if 'selection' not in {r[1] for r in db.execute('PRAGMA table_info(queue)')}:
                 db.execute('ALTER TABLE queue ADD COLUMN selection TEXT')
+            if 'prepare_only' not in {r[1] for r in db.execute('PRAGMA table_info(queue)')}:
+                db.execute('ALTER TABLE queue ADD COLUMN prepare_only INTEGER DEFAULT 0')
 
     @contextmanager
     def connect(self):
@@ -96,7 +98,7 @@ class Store:
             return None
         return row
 
-    def submit(self, jid, request_id, text, progress, selection=None):
+    def submit(self, jid, request_id, text, progress, selection=None, prepare_only=False):
         with self.connect() as db:
             db.execute("BEGIN IMMEDIATE")
             replay = db.execute(
@@ -130,8 +132,8 @@ class Store:
             else:
                 db.execute("UPDATE jobs SET status=? WHERE id=?", ("queued", jid))
                 db.execute(
-                    "INSERT INTO queue(job_id,text,request_id,selection) VALUES (?,?,?,?)",
-                    (jid, text, request_id, json.dumps(selection) if selection is not None else None),
+                    "INSERT INTO queue(job_id,text,request_id,selection,prepare_only) VALUES (?,?,?,?,?)",
+                    (jid, text, request_id, json.dumps(selection) if selection is not None else None, int(prepare_only)),
                 )
             return code, response
 

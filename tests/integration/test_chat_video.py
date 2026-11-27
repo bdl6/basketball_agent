@@ -211,3 +211,27 @@ def test_manually_selected_uncertain_event_renders_without_model(tmp_path, sourc
         assert result['events'][0]['label']=='uncertain'
         output=tmp_path/'selected.mp4';output.write_bytes(client.get(result['result']['url'],headers=h).content)
         assert duration(output)==pytest.approx(7,abs=.2)
+
+
+def test_candidates_are_independent_private_clips(tmp_path, source):
+    from backend.candidates import prepare_candidates
+    app=create_app(Settings(data_dir=tmp_path/'candidate-store'))
+    store=app.state.store;store.create('one','token')
+    directory=store.tasks/'one';directory.mkdir()
+    import shutil
+    shutil.copy(source,directory/'source.mp4')
+    state={'events':[{'id':'maybe','time':1,'label':'uncertain','evidence':{}}]}
+    with store.connect() as db:
+        original=json.loads(db.execute("SELECT state FROM jobs WHERE id='one'").fetchone()['state'])
+    original.update(state)
+    progress=[]
+    prepare_candidates(store,'one',original,directory/'source.mp4',progress.append)
+    clip=original['candidate_clips']['maybe']
+    assert clip['url']=='/api/jobs/one/candidates/maybe'
+    assert duration(Path(clip['path']))==pytest.approx(3,abs=.2)
+    assert original['events'][0]['label']=='uncertain'
+    with TestClient(app) as client:
+        assert client.get(clip['url']).status_code==404
+        r=client.get(clip['url'],headers={'X-Task-Token':'token','Range':'bytes=0-127'})
+        assert r.status_code==206 and len(r.content)==128
+        assert client.get('/api/jobs/one/candidates/unknown',headers={'X-Task-Token':'token'}).status_code==404

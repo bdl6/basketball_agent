@@ -1,3 +1,4 @@
+from backend.candidates import public_clips
 """Task-scoped SSE snapshots, backed by durable messages across worker processes."""
 import asyncio
 import json
@@ -14,7 +15,8 @@ def snapshot(store, jid, token):
             'SELECT payload FROM messages WHERE job_id=? ORDER BY seq', (jid,))]
     return {'job': dict(id=jid, status=row['status'], events=state['events'] or [],
             displayed_event_ids=state['displayed_event_ids'], plan=state['plan'],
-            result=state['result'], error=state['error']), 'messages': messages}
+            result=state['result'], error=state['error'],
+            candidate_clips=public_clips(state)), 'messages': messages}
 
 
 async def stream_task_events(store, jid, token, request, *, interval=.3):

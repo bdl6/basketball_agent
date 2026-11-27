@@ -1,3 +1,4 @@
+from backend.candidates import public_clips
 """FastAPI boundary. Run a separate ``python -m backend.worker`` process.
 
 Disable uvicorn access logs (``--no-access-log``) and redact query strings in
@@ -30,6 +31,10 @@ class Settings(BaseModel):
             os.getenv("BASKETBALL_MODEL_PATH", "models/bball_model.pt")
         )
     )
+
+
+class PrepareInput(BaseModel):
+    request_id: str = Field(min_length=1,max_length=128)
 
 
 class SelectionInput(BaseModel):
@@ -144,6 +149,7 @@ def create_app(settings=None, *, probe=probe_duration, executor=None):
             plan=state["plan"],
             result=state["result"],
             error=state["error"],
+            candidate_clips=public_clips(state),
         )
 
     @app.get("/api/jobs/{jid}/messages")
@@ -159,6 +165,25 @@ def create_app(settings=None, *, probe=probe_duration, executor=None):
                     )
                 ]
             )
+
+    @app.post("/api/jobs/{jid}/candidates")
+    def prepare(jid: str, payload: PrepareInput, x_task_token: str | None = Header(default=None)):
+        row=authorized(jid,x_task_token)
+        if not json.loads(row['state']).get('events'):
+            raise HTTPException(422,'还没有可生成短视频的候选')
+        code,body=store.submit(jid,payload.request_id,'准备独立候选短视频',False,prepare_only=True)
+        return JSONResponse(body,status_code=code)
+
+    @app.get("/api/jobs/{jid}/candidates/{event_id}")
+    def candidate(jid: str,event_id: str,token: str | None=None,x_task_token: str | None=Header(default=None)):
+        row=authorized(jid,x_task_token or token)
+        clip=json.loads(row['state']).get('candidate_clips',{}).get(event_id,{})
+        if clip.get('status')!='ready':
+            raise HTTPException(404,'候选短视频尚未生成')
+        path=Path(clip['path']).resolve()
+        if not path.is_relative_to((store.tasks/jid).resolve()) or not path.is_file():
+            raise HTTPException(404,'候选短视频不存在')
+        return FileResponse(path,media_type='video/mp4',headers={'Cache-Control':'private, no-store','Referrer-Policy':'no-referrer'})
 
     @app.post("/api/jobs/{jid}/selection")
     def selection(jid: str, payload: SelectionInput, x_task_token: str | None = Header(default=None)):

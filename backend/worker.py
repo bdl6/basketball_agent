@@ -143,7 +143,11 @@ class Worker:
                     event.setdefault('evidence', {})['user_selected'] = event['id'] in selection
                 execution_state['plan']['excluded_event_ids'] = [
                     e['id'] for e in execution_state['events'] or [] if e['id'] not in selection]
-            output = self.execute(
+            if claimed.get('prepare_only'):
+                output = dict(events=state['events'],plan=state['plan'],result_path=None,
+                    pending_context=state.get('pending_context'),message='候选短视频已准备完成，请逐条预览并选择。')
+            else:
+                output = self.execute(
                 dict(
                     video_path=video,
                     work_dir=work,
@@ -192,6 +196,9 @@ class Worker:
                 state["events"] = candidate_events
             state["pending_context"] = output.get("pending_context")
             state["error"] = None
+            if self.executor is None:
+                from .candidates import prepare_candidates
+                prepare_candidates(self.store,jid,state,video,lambda stage:self.stage(jid,stage))
             status = "completed"
             message = output.get("message") or "处理完成"
         except Exception as exc:

@@ -91,3 +91,12 @@ Recognition publishes stage start/completion messages: 1/6 locate hoop, 2/6 scan
 Event labels include made (model-confirmed), probable (high-evidence possible goal), uncertain and missed. POST /api/jobs/{id}/selection takes {request_id,event_ids:[...]} with X-Task-Token. It validates nonempty task-owned non-missed IDs, deduplicates and serializes rendering. No LLM/new detection runs. Ordinary uncertain events render only after explicit user selection; label remains unchanged, evidence.user_selected records intent. Selection flags and exclusions commit with verified output; failures preserve the previous result.
 
 GET /api/jobs/{id}/source provides private source video with Range support and X-Task-Token or query-token protection as on result files. Existing no-access-log/no-referrer/no-store rules apply. Preview depends on browser source codec support; failures show a visible message.
+
+
+## Independent candidate clips
+
+The serial worker generates a separate H.264/AAC MP4 for each non-missed candidate (default5s before/2s after, clipped to source bounds). It commits each completed clip and pushes a durable status message before continuing to the next. Public job/SSE snapshots expose candidate_clips keyed by event ID, with status and URL; filesystem paths are never returned. Candidate generation does not modify recognition labels.
+
+POST /api/jobs/{id}/candidates with {request_id} and task header queues preparation only, for historical tasks/retries without recognition or LLM. Queue prepare_only distinguishes this from editing; the previous movie/plan remains valid. Cached verified clips are reused.
+
+GET /api/jobs/{id}/candidates/{event_id} requires task header or query token and streams only the corresponding clip with Range support. The UI presents separate chronological video-message cards, each starting at clip time0, plus its source anchor/classification and selection control. Original-video seeking is no longer the candidate preview mechanism. Candidate files share task expiration cleanup.
