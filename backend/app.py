@@ -32,6 +32,12 @@ class Settings(BaseModel):
     )
 
 
+class SelectionInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    request_id: str = Field(min_length=1,max_length=128)
+    event_ids: list[str] = Field(min_length=1,max_length=1000)
+
+
 class MessageInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     request_id: str = Field(min_length=1, max_length=128)
@@ -154,6 +160,17 @@ def create_app(settings=None, *, probe=probe_duration, executor=None):
                 ]
             )
 
+    @app.post("/api/jobs/{jid}/selection")
+    def selection(jid: str, payload: SelectionInput, x_task_token: str | None = Header(default=None)):
+        row = authorized(jid, x_task_token)
+        state = json.loads(row['state'])
+        allowed = {e['id'] for e in state['events'] or [] if e['label'] != 'missed'}
+        ids = list(dict.fromkeys(payload.event_ids))
+        if not set(ids) <= allowed:
+            raise HTTPException(422, '选择包含不存在或明确未进的事件')
+        code, body = store.submit(jid,payload.request_id,'按勾选的候选生成集锦',False,selection=ids)
+        return JSONResponse(body,status_code=code)
+
     @app.get("/api/jobs/{jid}/events")
     async def events(jid: str, request: Request, x_task_token: str | None = Header(default=None)):
         authorized(jid, x_task_token)
@@ -180,6 +197,14 @@ def create_app(settings=None, *, probe=probe_duration, executor=None):
         )
         code, body = store.submit(jid, payload.request_id, text, progress)
         return JSONResponse(body, status_code=code)
+
+    @app.get("/api/jobs/{jid}/source")
+    def source(jid: str, token: str | None = None, x_task_token: str | None = Header(default=None)):
+        authorized(jid, x_task_token or token)
+        path = next((store.tasks / jid).glob('source.*'), None)
+        if path is None or not path.is_file():
+            raise HTTPException(404, '原视频不存在')
+        return FileResponse(path,headers={'Referrer-Policy':'no-referrer','Cache-Control':'private, no-store'})
 
     @app.get("/api/jobs/{jid}/result")
     def result(

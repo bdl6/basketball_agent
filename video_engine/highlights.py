@@ -1,3 +1,4 @@
+from contracts.models import highlight_eligible
 """Render verified, chronological highlights from the original source."""
 from collections.abc import Sequence
 import math
@@ -19,7 +20,7 @@ def build_intervals(events: Sequence[Event], plan: EditPlan, duration: float) ->
         raise ValueError('事件 ID 重复')
     if any(not math.isfinite(event.time) or not 0 <= event.time <= duration for event in events):
         raise ValueError('事件时间超出原视频范围')
-    selected = sorted((event for event in events if event.label == 'made'
+    selected = sorted((event for event in events if highlight_eligible(event)
                        and event.id not in plan.excluded_event_ids), key=lambda event: (event.time, event.id))
     if not selected:
         raise ValueError('没有可剪辑的可靠进球')

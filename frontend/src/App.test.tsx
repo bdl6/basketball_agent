@@ -12,6 +12,7 @@ vi.mock("./api", async (importOriginal) => ({
     messages: vi.fn(),
     send: vi.fn(),
     watch: vi.fn(),
+    select: vi.fn(),
   },
 }));
 const mock = api as any;
@@ -44,6 +45,7 @@ beforeEach(() => {
   mock.job.mockResolvedValue(completed);
   mock.messages.mockResolvedValue({ messages: [] });
   mock.send.mockResolvedValue({ status: "queued" });
+  mock.select.mockResolvedValue({status:"queued"});
 });
 test("welcome and upload guidance render even when service is unavailable", async () => {
   mock.config.mockRejectedValue(new Error("离线"));
@@ -321,4 +323,23 @@ test("completed analysis without a movie never claims highlights are ready", asy
   expect(screen.queryByText("集锦已就绪")).not.toBeInTheDocument();
   expect(screen.queryByLabelText("进球集锦播放器")).not.toBeInTheDocument();
   expect(screen.queryByRole("link",{name:"下载集锦"})).not.toBeInTheDocument();
+});
+
+
+test("likely goals are explicitly marked in the result list", async () => {
+  localStorage.setItem("basketball-session", JSON.stringify({id:"one",token:"secret"}));
+  mock.job.mockResolvedValue({...completed,events:[{id:"e1",time:12.5,label:"made"},{id:"e2",time:25,label:"probable"}]});
+  render(<App />);
+  expect(await screen.findByText("疑似进球")).toBeVisible();
+  expect(screen.getByText("确认进球")).toBeVisible();
+});
+
+
+test("user can pick an uncertain candidate even when no movie was generated", async () => {
+  localStorage.setItem("basketball-session",JSON.stringify({id:"one",token:"secret"}));
+  mock.job.mockResolvedValue({...completed,result:null,displayed_event_ids:[],events:[{id:"u1",time:12,label:"uncertain"}]});
+  render(<App />);
+  await userEvent.click(await screen.findByRole("checkbox",{name:/候选 1/}));
+  await userEvent.click(screen.getByRole("button",{name:/按选择生成集锦/}));
+  expect(mock.select).toHaveBeenCalledWith(expect.objectContaining({id:"one"}),expect.objectContaining({event_ids:["u1"],request_id:expect.any(String)}),expect.any(AbortSignal));
 });

@@ -68,6 +68,14 @@ export default function App() {
     [sending, setSending] = useState(false),
     [replacement, setReplacement] = useState<File | null>(null),
     [refresh, setRefresh] = useState(0);
+  const [picks, setPicks] = useState<string[]>([]);
+  const [preview, setPreview] = useState<number | null>(null);
+  const selectionRequest = useRef<{key:string; id:string} | null>(null);
+  const pickKey = JSON.stringify([session?.id,job?.events,job?.displayed_event_ids]);
+  useEffect(() => {
+    setPicks(job?.displayed_event_ids.length ? job.displayed_event_ids : (job?.events || []).filter(e => ["made","probable"].includes(e.label)).map(e => e.id));
+    setPreview(null);
+  },[pickKey]);
   const input = useRef<HTMLInputElement>(null),
     field = useRef<HTMLTextAreaElement>(null),
     action = useRef<AbortController | null>(null),
@@ -180,6 +188,23 @@ export default function App() {
       ...v,
       { id: crypto.randomUUID(), role: "assistant", text: message },
     ]);
+  }
+  async function submitSelection() {
+    if (!session || busy || !picks.length) return;
+    const c = new AbortController();
+    action.current?.abort(); action.current = c;
+    const version = generation.current;
+    const key = JSON.stringify(picks.slice().sort());
+    if (selectionRequest.current?.key !== key) selectionRequest.current = {key,id:crypto.randomUUID()};
+    setSending(true); setError("");
+    try {
+      await api.select(session,{request_id:selectionRequest.current.id,event_ids:picks},c.signal);
+      if (c.signal.aborted || version !== generation.current) return;
+      selectionRequest.current = null;
+      setJob(j => j ? {...j,status:"queued"} : j);
+      setRefresh(v => v+1);
+    } catch(e) { if (!c.signal.aborted && version===generation.current) setError(reason(e)); }
+    finally { if (version===generation.current) setSending(false); }
   }
   async function upload(file: File) {
     if (!config) {
@@ -337,7 +362,7 @@ export default function App() {
           <p className="welcome">
             你好，我是篮球进球剪辑助手。我可以从固定机位、篮筐清晰的篮球视频中寻找可靠进球，生成可播放、下载的集锦。请先点击下方按钮上传一段短视频。
           </p>
-          <p>默认每球保留前 5 秒、后 2 秒。识别不清楚的球不会自动加入集锦。</p>
+          <p>默认每球保留前 5 秒、后 2 秒。高可信疑似进球会标注纳入，普通不确定事件不加入。</p>
           <div className="upload-box">
             <label
               className={"upload-button " + (busy || !config ? "disabled" : "")}
@@ -463,6 +488,27 @@ export default function App() {
                 {error}
               </div>
             )}
+            {job && session && job.events.some(e => e.label !== "missed") && (
+              <article className="result">
+                <h3>选择要保留的进球</h3>
+                <p>确认进球是模型的高置信判断；疑似及不确定事件需要你核对。勾选只影响剪辑，不改变识别结论。</p>
+                <ul className="events">
+                  {job.events.filter(e => e.label !== "missed").map((e,i) => (
+                    <li key={e.id}>
+                      <label><input type="checkbox" aria-label={`候选 ${i+1} ${time(e.time)}`} checked={picks.includes(e.id)} disabled={busy}
+                        onChange={v => setPicks(old => v.target.checked ? [...old,e.id] : old.filter(id => id!==e.id))} />
+                        候选 {i+1} · {time(e.time)} · {e.label==="made"?"模型确认":e.label==="probable"?"疑似进球":"不确定"}</label>
+                      <button type="button" onClick={() => setPreview(e.time)}>预览</button>
+                    </li>))}
+                </ul>
+                {preview !== null && <video key={`${session.id}-${preview}`} aria-label="候选原片预览" controls preload="metadata"
+                  src={mediaUrl(`/api/jobs/${encodeURIComponent(session.id)}/source`,session)}
+                  onLoadedMetadata={e => {e.currentTarget.currentTime=preview;}}
+                  onError={() => setError("原片预览格式不受浏览器支持，可按源时间点选择事件。")}/>}
+                <button type="button" className="send" disabled={busy || !picks.length} onClick={() => void submitSelection()}>
+                  按选择生成集锦（{picks.length}）</button>
+              </article>
+            )}
             {job?.result && session && (
               <article className="result">
                 <div className="result-heading">
@@ -500,12 +546,13 @@ export default function App() {
                   {visible.map((e, i) => (
                     <li key={e.id}>
                       <span>第 {i + 1} 球</span>
+                      <span>{e.label === "probable" ? "疑似进球" : e.label === "made" ? "确认进球" : "用户选入·不确定"}</span>
                       <time>{time(e.time)}</time>
                     </li>
                   ))}
                 </ol>
                 <p className="result-hint">
-                  时间点对应原视频。用“第几球”告诉我需要去掉哪一球。
+                  时间点对应原视频。疑似进球尚未确认命中，可说“去掉第几球”排除。
                 </p>
               </article>
             )}

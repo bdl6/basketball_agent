@@ -8,7 +8,7 @@ class Contract(BaseModel):
 class Event(Contract):
     id: str = Field(min_length=1)
     time: float = Field(ge=0)
-    label: Literal["made", "missed", "uncertain"]
+    label: Literal["made", "probable", "missed", "uncertain"]
     evidence: dict[str, Any] = Field(default_factory=dict)
 
 class EditPlan(Contract):
@@ -60,3 +60,7 @@ class Job(Contract):
     plan: EditPlan = Field(default_factory=EditPlan)
     result: Result | None = None
     error: str | None = None
+
+
+def highlight_eligible(event: Event) -> bool:
+    return event.label in ('made','probable') or (event.label=='uncertain' and event.evidence.get('user_selected') is True)

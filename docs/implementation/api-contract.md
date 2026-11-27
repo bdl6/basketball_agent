@@ -84,3 +84,10 @@ Analyzer stable IDs must survive persistence/re-render. Analysis includes source
 `GET /api/jobs/{id}/events` requires `X-Task-Token` (never a query token). The client uses streaming fetch so credentials remain in the header. Response is `text/event-stream` with buffering disabled and no cache. `event: snapshot` data contains `{job: <status response>, messages: [...]}`; the initial snapshot includes durable history, and subsequent changes are pushed automatically. Heartbeat comments keep idle connections alive. Expiration sends `event: expired` and closes; clients reconnect after transient disconnects and may use existing GET endpoints as fallback.
 
 Recognition publishes stage start/completion messages: 1/6 locate hoop, 2/6 scan tracks, 3/6 select candidates, 4/6 refine candidates, 5/6 verify crossing; rendering is 6/6. Conditional stages only run when candidates exist; no fabricated percentage or ETA. The detector accepts an optional on_progress callback, passed through the production analyzer and graph to the existing acknowledged worker IPC. Each message is committed before the child continues, so completed stages survive refresh. SSE reads task-owned persisted state across API/worker processes.
+
+
+## User selection
+
+Event labels include made (model-confirmed), probable (high-evidence possible goal), uncertain and missed. POST /api/jobs/{id}/selection takes {request_id,event_ids:[...]} with X-Task-Token. It validates nonempty task-owned non-missed IDs, deduplicates and serializes rendering. No LLM/new detection runs. Ordinary uncertain events render only after explicit user selection; label remains unchanged, evidence.user_selected records intent. Selection flags and exclusions commit with verified output; failures preserve the previous result.
+
+GET /api/jobs/{id}/source provides private source video with Range support and X-Task-Token or query-token protection as on result files. Existing no-access-log/no-referrer/no-store rules apply. Preview depends on browser source codec support; failures show a visible message.

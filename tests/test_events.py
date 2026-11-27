@@ -80,3 +80,22 @@ def test_neighboring_goal_does_not_swallow_unrefined_seed():
     matches = collect_matches({'results':[{'coarse':{'time':5},
         'refined':[{'time':7,'verdict':'made'}], 'rim_local':None, 'fallback_trajectory':[]}]})
     assert {m['time'] for m in matches} == {5,7}
+
+
+@pytest.mark.parametrize('match,check,want', [
+    ({'verdict':'made'}, {'status':'unsure','reason':'no_crossing'}, 'probable'),
+    ({'verdict':'made'}, {'status':'unsure','reason':'no_exit'}, 'probable'),
+    ({'verdict':'ambiguous','complete_crossing':True,'crossing_inside_rim':True,'gates':{'high_precision':True}}, {'status':'made'}, 'probable'),
+    ({'verdict':'ambiguous'}, {'status':'made'}, 'uncertain'),
+    ({'verdict':'made','coarse_crossing':True}, {'status':'unsure','reason':'no_crossing'}, 'uncertain'),
+    ({'verdict':'made'}, {'status':'skipped','reason':'hypothesis_conflict'}, 'uncertain'),
+    ({'verdict':'made'}, {'status':'rejected','reason':'rebound'}, 'uncertain'),
+])
+def test_recall_policy_needs_strong_positive_without_counterevidence(match,check,want):
+    assert classify_events([{'time':1,**match}], [check])[0]['label']==want
+
+
+def test_explicit_negative_duplicate_vetoes_probable_goal():
+    matches=[{'time':1,'verdict':'made'}, {'time':1.1,'verdict':'missed'}]
+    checks=[{'status':'unsure','reason':'no_crossing'}, {'status':'rejected','reason':'rebound'}]
+    assert classify_events(matches,checks)[0]['label']=='uncertain'

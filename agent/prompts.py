@@ -8,6 +8,7 @@ apply 必须含非空 operations；不要猜测缺失的前后方向、编号、
 有歧义时 status=clarify，operations=[]，message 用中文提出具体澄清问题。
 球员筛选、字幕、配乐、任意命令等不支持操作，或支持与不支持混合指令，全部返回 unsupported，operations=[]，message 说明能力边界。
 不要部分执行复合指令。除了支持的五种操作不能生成其他操作。时长范围 0..60。
+事件 made 为确认进球，probable 为疑似进球，均可按展示编号排除；不能把疑似解释为确认。
 已有澄清时结合原需求和回复理解，仍有歧义继续 clarify。
 例：去掉第二球，每球前面多留三秒 -> {"status":"apply","operations":[{"op":"exclude","ordinal":2},{"op":"add_before","value":3}],"message":""}
 '''

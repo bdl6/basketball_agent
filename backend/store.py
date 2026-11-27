@@ -32,6 +32,9 @@ class Store:
             CREATE TABLE IF NOT EXISTS queue (seq INTEGER PRIMARY KEY, job_id TEXT NOT NULL, text TEXT, request_id TEXT, status TEXT NOT NULL DEFAULT 'queued');
             """)
 
+            if 'selection' not in {r[1] for r in db.execute('PRAGMA table_info(queue)')}:
+                db.execute('ALTER TABLE queue ADD COLUMN selection TEXT')
+
     @contextmanager
     def connect(self):
         db = sqlite3.connect(self.path, timeout=30)
@@ -93,7 +96,7 @@ class Store:
             return None
         return row
 
-    def submit(self, jid, request_id, text, progress):
+    def submit(self, jid, request_id, text, progress, selection=None):
         with self.connect() as db:
             db.execute("BEGIN IMMEDIATE")
             replay = db.execute(
@@ -127,8 +130,8 @@ class Store:
             else:
                 db.execute("UPDATE jobs SET status=? WHERE id=?", ("queued", jid))
                 db.execute(
-                    "INSERT INTO queue(job_id,text,request_id) VALUES (?,?,?)",
-                    (jid, text, request_id),
+                    "INSERT INTO queue(job_id,text,request_id,selection) VALUES (?,?,?,?)",
+                    (jid, text, request_id, json.dumps(selection) if selection is not None else None),
                 )
             return code, response
 

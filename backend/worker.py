@@ -9,7 +9,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from contracts.models import EditPlan, Event
+from contracts.models import EditPlan, Event, highlight_eligible
 from .store import Store
 from .errors import public_error
 
@@ -136,16 +136,23 @@ class Worker:
         work.mkdir()
         try:
             video = next(directory.glob("source.*"))
+            execution_state = json.loads(json.dumps(state))
+            selection = json.loads(claimed['selection']) if claimed.get('selection') else None
+            if selection is not None:
+                for event in execution_state['events'] or []:
+                    event.setdefault('evidence', {})['user_selected'] = event['id'] in selection
+                execution_state['plan']['excluded_event_ids'] = [
+                    e['id'] for e in execution_state['events'] or [] if e['id'] not in selection]
             output = self.execute(
                 dict(
                     video_path=video,
                     work_dir=work,
                     model_path=self.store.settings.model_path,
-                    events=state["events"],
-                    plan=state["plan"],
+                    events=execution_state["events"],
+                    plan=execution_state["plan"],
                     displayed_event_ids=state["displayed_event_ids"],
-                    text=claimed["text"],
-                    pending_context=state.get("pending_context"),
+                    text=None if selection is not None else claimed["text"],
+                    pending_context=None if selection is not None else state.get("pending_context"),
                     on_stage=lambda s: self.stage(jid, s),
                 )
             )
@@ -164,7 +171,7 @@ class Worker:
                 expected = [
                     e["id"]
                     for e in sorted(candidate_events, key=lambda e: e["time"])
-                    if e["label"] == "made"
+                    if highlight_eligible(Event.model_validate(e))
                     and e["id"] not in candidate_plan["excluded_event_ids"]
                 ]
                 if output["displayed_event_ids"] != expected or not expected:

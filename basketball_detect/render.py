@@ -13,8 +13,8 @@ from PIL import Image, ImageDraw, ImageFont
 from .media import inspect_video, probe
 from .pipeline import AnalysisResult
 
-LABELS = {"idle": "分析完成 · 无当前候选", "made": "进球", "missed": "未进", "uncertain": "无法确认"}
-COLORS = {"idle": (230, 230, 230), "made": (70, 235, 110), "missed": (255, 90, 80), "uncertain": (255, 210, 70)}
+LABELS = {"idle": "分析完成 · 无当前候选", "made": "进球", "probable": "疑似进球", "missed": "未进", "uncertain": "无法确认"}
+COLORS = {"idle": (230, 230, 230), "made": (70, 235, 110), "probable": (255, 180, 70), "missed": (255, 90, 80), "uncertain": (255, 210, 70)}
 
 
 class OverlayTimeline:

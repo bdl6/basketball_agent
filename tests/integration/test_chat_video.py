@@ -46,7 +46,8 @@ def duration(path):
     return float(json.loads(result.stdout)['format']['duration'])
 
 
-def test_upload_modify_and_failed_render_preserve_previous_movie(tmp_path, source):
+@pytest.mark.parametrize("second_label", ["made", "probable"])
+def test_upload_modify_and_failed_render_preserve_previous_movie(tmp_path, source, second_label):
     calls = {'analysis': 0, 'llm': 0, 'render': 0}
     stages = []
 
@@ -54,7 +55,7 @@ def test_upload_modify_and_failed_render_preserve_previous_movie(tmp_path, sourc
         calls['analysis'] += 1
         assert Path(video).read_bytes() == source.read_bytes()
         return Analysis(events=[Event(id='first', time=10, label='made'),
-                                Event(id='second', time=24, label='made')],
+                                Event(id='second', time=24, label=second_label)],
                         duration_seconds=30, metadata={'simulated': True})
 
     def simulated_llm(request):
@@ -189,3 +190,24 @@ def test_real_worker_process_reports_missing_weights(tmp_path, source):
         finally:
             process.terminate()
             process.wait(timeout=10)
+
+
+def test_manually_selected_uncertain_event_renders_without_model(tmp_path, source):
+    graph=create_graph(interpreter=lambda *a,**k: pytest.fail('selection called LLM'),
+                       analyzer=lambda *a,**k: pytest.fail('selection repeated recognition'))
+    app=create_app(Settings(data_dir=tmp_path/'selected-store'),executor=lambda **state:graph.invoke(state))
+    with TestClient(app) as client:
+        job=client.post('/api/jobs',files={'file':('sample.mp4',source.read_bytes(),'video/mp4')}).json()
+        h={'X-Task-Token':job['token']};base='/api/jobs/'+job['id']
+        with app.state.store.connect() as db:
+            row=db.execute('SELECT state FROM jobs WHERE id=?',(job['id'],)).fetchone()
+            state=json.loads(row['state']);state['events']=[{'id':'maybe','time':10,'label':'uncertain','evidence':{}}]
+            db.execute("UPDATE jobs SET status='completed',state=? WHERE id=?",(json.dumps(state),job['id']))
+            db.execute("UPDATE queue SET status='completed' WHERE job_id=?",(job['id'],))
+        assert client.post(base+'/selection',headers=h,json={'request_id':'pick','event_ids':['maybe']}).status_code==202
+        assert app.state.worker.run_once()
+        result=client.get(base,headers=h).json()
+        assert result['status']=='completed' and result['displayed_event_ids']==['maybe']
+        assert result['events'][0]['label']=='uncertain'
+        output=tmp_path/'selected.mp4';output.write_bytes(client.get(result['result']['url'],headers=h).content)
+        assert duration(output)==pytest.approx(7,abs=.2)

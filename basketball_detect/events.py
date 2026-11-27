@@ -1,4 +1,4 @@
-"""Conservative evidence agreement; absent observations never become misses."""
+"""Confirmed and high-evidence probable goals; explicit counterevidence still vetoes."""
 import math
 
 
@@ -35,6 +35,18 @@ def classify_events(matches: list[dict], rim_checks: list[dict]) -> list[dict]:
             label, reason = "missed", check.get("reason") or "negative_evidence"
         else:
             label, reason = "uncertain", check.get("reason") or "insufficient_evidence"
+        # Probable is a distinct result, never an automatic upgrade to made.
+        # A missing/failed check is operational absence, not supporting evidence.
+        geometry = (match.get("complete_crossing") is True
+                    and match.get("crossing_inside_rim") is True
+                    and (match.get("gates") or {}).get("high_precision") is True)
+        missing_observation = status == "unsure" and check.get("reason") in {
+            "no_crossing", "no_entry", "no_exit"}
+        if label == "uncertain" and not match.get("coarse_crossing") and not negative:
+            if positive and missing_observation:
+                label, reason = "probable", "trajectory_positive_rim_unobserved"
+            elif verdict == "ambiguous" and geometry and status == "made":
+                label, reason = "probable", "rim_positive_strong_trajectory"
         overlay = match.get("overlay") or {}
         events.append({"time": timestamp, "label": label, "reason": reason,
                        "rim": overlay.get("rim"), "trajectory": overlay.get("trajectory", []),

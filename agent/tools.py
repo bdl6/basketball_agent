@@ -1,3 +1,4 @@
+from contracts.models import highlight_eligible
 """Pure, atomic plan tools; no arbitrary commands are accepted."""
 from collections.abc import Sequence
 from contracts.models import EditPlan, Event, Operation
@@ -6,7 +7,7 @@ from contracts.models import EditPlan, Event, Operation
 def list_events(events: Sequence[Event], plan: EditPlan) -> list[Event]:
     if len({event.id for event in events}) != len(events):
         raise ValueError('事件 ID 重复，无法修改')
-    return sorted((event for event in events if event.label == 'made'
+    return sorted((event for event in events if highlight_eligible(event)
                    and event.id not in plan.excluded_event_ids), key=lambda event: (event.time, event.id))
 
 

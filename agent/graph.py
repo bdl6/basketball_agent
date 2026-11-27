@@ -89,7 +89,13 @@ def create_graph(*, interpreter=None, analyzer=None, renderer=None):
             'before_seconds': plan.before_seconds, 'after_seconds': plan.after_seconds})
         output = Path(state['work_dir']) / f'highlights-{uuid4().hex}.mp4'
         result = renderer(state['video_path'], events, plan, output)
-        message = f'集锦已生成：共 {len(result.event_ids)} 个可靠进球，每球前 {plan.before_seconds:g} 秒、后 {plan.after_seconds:g} 秒。'
+        selected = [e for e in events if e.id in result.event_ids]
+        confirmed = sum(e.label == 'made' for e in selected)
+        probable = sum(e.label == 'probable' for e in selected)
+        uncertain = sum(e.label == 'uncertain' for e in selected)
+        message = f'集锦已生成：共 {len(selected)} 个片段（{confirmed} 个确认进球、{probable} 个疑似进球、{uncertain} 个用户选择的不确定事件），每球前 {plan.before_seconds:g} 秒、后 {plan.after_seconds:g} 秒。'
+        if probable:
+            message += '疑似事件已在列表标明，可说“去掉第几球”排除。'
         if state.get('interpretation'):
             removed = sum(op.op == 'exclude' for op in state['interpretation'].operations)
             if removed:

@@ -104,6 +104,8 @@ async function watchProgress(session: Session, receive: (data: ProgressSnapshot)
   if (!signal.aborted) throw new ApiError("进度连接已断开");
 }
 export const api = {
+  select: (s: Session, body: {request_id: string; event_ids: string[]}, signal?: AbortSignal) =>
+    request<{status:string}>(base(s)+"/selection",s,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body),signal}),
   watch: watchProgress,
   config: (signal?: AbortSignal) =>
     request<Config>("/api/config", undefined, { signal }),
@@ -173,7 +175,7 @@ export function mediaUrl(path: string, session: Session) {
   const url = new URL(path, window.location.origin);
   if (
     url.origin !== window.location.origin ||
-    url.pathname !== "/api/jobs/" + encodeURIComponent(session.id) + "/result"
+    !["/result", "/source"].some(suffix => url.pathname === "/api/jobs/" + encodeURIComponent(session.id) + suffix)
   )
     return "";
   url.searchParams.set("token", session.token);
