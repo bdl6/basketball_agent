@@ -14,13 +14,16 @@ Values above are defaults; frontend displays actual server values. Configuration
 
 `POST /api/jobs`, multipart form field `file`, responds 202 immediately after validation and durable queueing:
 ```json
-{"id":"job-example","token":"opaque-random-secret","status":"queued"}
+{"id":"job-example","token":"opaque-random-secret","status":"preparing_roi"}
 ```
 A session has one video. Starting another upload requires frontend reset notice. The client saves id/token in localStorage to restore this browser session. Store only token hash server-side.
 
+Before recognition the worker prepares region suggestions and stops at `awaiting_roi`.
+Confirm using authenticated `POST /api/jobs/{id}/roi` with `{request_id, roi:{x1,y1,x2,y2}, net_roi:{x1,y1,x2,y2}}` in source display pixels. Both rectangles are required. A successful 202 queues analysis; an identical request replays its response. New requests while processing return 409. Editing ROI clears previous events, candidate previews and results. Status and SSE snapshots include `roi` metadata. See [ROI details](upstream-roi.md).
+
 ## Authorization and errors
 
-All job JSON requests require `X-Task-Token: <token>`. Missing, wrong, expired or another task's token returns the same 404 response. Errors use `{"detail":"human-readable message"}`. Invalid input is 422, upload too large 413, unsupported type 415, busy modification 409. Browser playback/download cannot attach custom headers: only `GET /api/jobs/{id}/result` additionally accepts `?token=<token>`. Result URLs must not be logged; redact query strings in server/proxy access logs, send `Referrer-Policy: no-referrer` and `Cache-Control: private, no-store`, and set page referrer policy to no-referrer. Do not expose a static task directory. Token header is also accepted on the result endpoint.
+All job JSON requests require `X-Task-Token: <token>`. Missing, wrong, expired or another task's token returns the same 404 response. Errors use `{"detail":"human-readable message"}`. Invalid input is 422, upload too large 413, unsupported type 415, busy modification 409. Browser playback/download cannot attach custom headers: media GET routes `/source`, `/candidates/{event_id}` and `/result` additionally accept `?token=<token>`. Media URLs must not be logged; redact query strings in server/proxy access logs, send `Referrer-Policy: no-referrer` and `Cache-Control: private, no-store`, and set page referrer policy to no-referrer. Do not expose a static task directory. Token header is also accepted on media endpoints.
 
 ## Status and current result
 
@@ -28,7 +31,7 @@ All job JSON requests require `X-Task-Token: <token>`. Missing, wrong, expired o
 ```json
 {"id":"job-example","status":"completed","events":[{"id":"event-1","time":12.5,"label":"made","evidence":{"reason":"trajectory_and_rim_agree"}},{"id":"event-2","time":25.0,"label":"made","evidence":{}}],"displayed_event_ids":["event-1","event-2"],"plan":{"before_seconds":5.0,"after_seconds":2.0,"excluded_event_ids":[]},"result":{"url":"/api/jobs/job-example/result?revision=r1","download_url":"/api/jobs/job-example/result?revision=r1&download=1","revision":"r1"},"error":null}
 ```
-Statuses: queued, analyzing, rendering, completed, failed, interrupted. events contains all original analysis events in source-time order; IDs are stable strings. displayed_event_ids is the time-sorted made subset excluding current exclusions, and defines one-based ordinals in the current chat result. Preserve last successful result and displayed list during a render or failure. Result URLs omit the credential in JSON; the client appends URL-encoded token for video/download. revision prevents browser cache confusion, not version browsing. On successful replacement update result and displayed list together.
+Statuses: preparing_roi, awaiting_roi, queued, analyzing, rendering, completed, failed, interrupted. Events preserve upstream candidates in source-time order; IDs remain stable within one analysis. displayed_event_ids contains included made/probable events and any user-selected uncertain events, excluding current exclusions, and defines one-based ordinals in the current chat result. Preserve last successful result and displayed list during a render or failure; ROI changes explicitly invalidate them. Result URLs omit credentials; the client appends URL-encoded token for video/download. revision prevents browser cache confusion. On successful replacement update result and displayed list together.
 
 ## Messages
 

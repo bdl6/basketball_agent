@@ -15,7 +15,7 @@ def main():
 
     def on_stage(stage):
         status = stage.get("status") if isinstance(stage, dict) else stage
-        if status in ("analyzing", "rendering"):
+        if status in ("preparing_roi", "analyzing", "rendering"):
             temporary = stage_path.with_suffix(".tmp")
             temporary.write_text(json.dumps(stage, ensure_ascii=False), encoding="utf8")
             temporary.replace(stage_path)
@@ -25,9 +25,14 @@ def main():
 
     args["on_stage"] = on_stage
     try:
-        from agent.graph import execute_job
-
-        output = execute_job(**args)
+        operation = args.pop('operation', 'analyze')
+        if operation == 'prepare_roi':
+            from video_engine.upstream import prepare_roi
+            output = prepare_roi(args['video_path'], args['work_dir'], model_path=args['model_path'],
+                                 engine_root=args.get('engine_root'), on_progress=on_stage)
+        else:
+            from agent.graph import execute_job
+            output = execute_job(**args)
     except Exception as error:
         output = {"worker_error": public_error(error)}
     output_path.write_text(json.dumps(output, ensure_ascii=False), encoding="utf8")

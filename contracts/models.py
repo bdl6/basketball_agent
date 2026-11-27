@@ -54,7 +54,8 @@ class Result(Contract):
 
 class Job(Contract):
     id: str
-    status: Literal["queued", "analyzing", "rendering", "completed", "failed", "interrupted"]
+    status: Literal["queued", "preparing_roi", "awaiting_roi", "analyzing", "rendering", "completed", "failed", "interrupted"]
+    roi: dict[str, Any] | None = None
     events: list[Event] = Field(default_factory=list)
     displayed_event_ids: list[str] = Field(default_factory=list)
     plan: EditPlan = Field(default_factory=EditPlan)

@@ -1,13 +1,10 @@
-import json
 import subprocess
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 from contracts.models import EditPlan, Event
-from video_engine import analyzer
 from video_engine.highlights import build_intervals, render_highlights
-from basketball_detect.media import probe
+from video_engine.media import probe
 
 
 def event(identifier, time, label='made'):
@@ -38,25 +35,6 @@ def test_invalid_or_empty_selection_never_builds_empty_movie(events, plan):
         build_intervals(events, plan, 20)
 
 
-def test_analysis_preserves_evidence_and_stable_ids_without_rendering(tmp_path, monkeypatch):
-    raw = [dict(id=2, time=8, label='uncertain', reason='occluded', raw_evidence=[{'verdict': 'made'}]),
-           dict(id=1, time=3, label='made', reason='agreement', raw_evidence=[{'rim_check': 'made'}])]
-    def detect(config, work_dir):
-        assert config.video == tmp_path / 'source.mp4'
-        assert config.model == tmp_path / 'weights.pt'
-        assert work_dir == tmp_path / 'analysis'
-        return SimpleNamespace(events=raw, metadata={'duration': 12, 'fps': 25},
-                               rim={'center_x': 50}, timings={'scan': .1}, model_sha256='abc')
-    monkeypatch.setattr(analyzer, '_analyze', detect)
-    result = analyzer.analyze_video(tmp_path / 'source.mp4', tmp_path / 'analysis', model_path=tmp_path / 'weights.pt')
-    again = analyzer.analyze_video(tmp_path / 'source.mp4', tmp_path / 'analysis', model_path=tmp_path / 'weights.pt')
-    assert [e.id for e in result.events] == ['event-1', 'event-2']
-    assert [e.label for e in result.events] == ['made', 'uncertain']
-    assert result.events[1].evidence == raw[0]
-    assert again.model_dump() == result.model_dump()
-    assert result.duration_seconds == 12
-    assert result.metadata['model_sha256'] == 'abc'
-    assert not list(tmp_path.glob('*.mp4'))
 
 
 def make_source(path, audio):
@@ -114,29 +92,6 @@ def test_existing_result_and_source_are_never_overwritten(tmp_path):
     assert previous.read_bytes() == b'valid previous result'
 
 
-def test_analysis_real_pipeline_can_return_no_goals_without_rendering(tmp_path, monkeypatch):
-    from functools import partial
-    from basketball_detect.pipeline import analyze
-    source = tmp_path / 'source.mp4'
-    make_source(source, False)
-    model = tmp_path / 'weights.pt'
-    model.write_bytes(b'test-model-for-metadata-hash')
-    def stage(script, args, output, log):
-        if script == 'detect_auto_roi.py':
-            return {'success': True, 'roi': [0, 0, 160, 120]}
-        if script == 'scan_video.py':
-            return {'records': []}
-        if script == 'generate_candidates.py':
-            return {'candidates': [], 'rim': {'center_x': 80, 'rim_y': 50, 'width': 30, 'height': 10}}
-        raise AssertionError(f'No refinement is expected without candidates: {script}')
-    monkeypatch.setattr(analyzer, '_analyze', partial(analyze, stage_runner=stage))
-    result = analyzer.analyze_video(source, tmp_path / 'analysis', model_path=model)
-    assert result.events == []
-    assert result.duration_seconds == pytest.approx(12)
-    assert len(result.metadata['model_sha256']) == 64
-    with pytest.raises(ValueError, match='可靠进球'):
-        render_highlights(source, result.events, EditPlan(), tmp_path / 'empty.mp4')
-    assert not (tmp_path / 'empty.mp4').exists()
 
 
 def test_failed_output_validation_keeps_previous_result_and_removes_partial(tmp_path, monkeypatch):
@@ -157,7 +112,7 @@ def test_failed_output_validation_keeps_previous_result_and_removes_partial(tmp_
 def test_import_does_not_load_heavy_detector_or_annotator_dependencies():
     import sys
     subprocess.run([sys.executable, '-c',
-                    "import video_engine, sys; assert not {'cv2', 'torch', 'ultralytics', 'basketball_detect.render'}.intersection(sys.modules)"],
+                    "import video_engine, sys; assert not {'cv2', 'torch', 'ultralytics'}.intersection(sys.modules)"],
                    check=True, capture_output=True)
 
 

@@ -8,6 +8,8 @@ class AgentState(TypedDict, total=False):
     video_path: Path
     work_dir: Path
     model_path: Path
+    roi: dict | None
+    engine_root: str | None
     events: list[dict] | None
     plan: dict
     displayed_event_ids: list[str]

@@ -19,6 +19,17 @@ def upload(client):
     r = client.post("/api/jobs", files={"file": ("clip.mp4", b"video", "video/mp4")})
     assert r.status_code == 202
     j = r.json()
+    # These tests exercise the post-confirmation editing flow. Preparation and
+    # the upload gate itself are covered by test_roi with no automatic confirm.
+    store = client.app.state.store
+    with store.connect() as db:
+        state = json.loads(db.execute('SELECT state FROM jobs WHERE id=?',(j['id'],)).fetchone()[0])
+        state['roi'] = {'width':1000,'height':600,'duration_seconds':10,'roi':None,'net_roi':None,'confirmed':False}
+        db.execute("UPDATE jobs SET status='awaiting_roi',state=? WHERE id=?",(json.dumps(state),j['id']))
+        db.execute("UPDATE queue SET status='completed' WHERE job_id=?",(j['id'],))
+    assert client.post(f"/api/jobs/{j['id']}/roi", headers={'X-Task-Token':j['token']}, json={
+        'request_id':'confirm-upload','roi':{'x1':0,'y1':0,'x2':1000,'y2':600},
+        'net_roi':{'x1':400,'y1':200,'x2':500,'y2':300}}).status_code == 202
     return j["id"], {"X-Task-Token": j["token"]}, j["token"]
 
 

@@ -14,6 +14,7 @@ vi.mock("./api", async (importOriginal) => ({
     watch: vi.fn(),
     select: vi.fn(),
     prepareCandidates: vi.fn(),
+    confirmRoi: vi.fn(),
   },
 }));
 const mock = api as any;
@@ -49,6 +50,22 @@ beforeEach(() => {
   mock.send.mockResolvedValue({ status: "queued" });
   mock.select.mockResolvedValue({status:"queued"});
   mock.prepareCandidates.mockResolvedValue({status:"queued"});
+  mock.confirmRoi.mockResolvedValue({status:'queued'});
+});
+test('ROI confirmation gates recognition and sends both source rectangles', async()=>{
+  localStorage.setItem('basketball-session',JSON.stringify({id:'one',token:'secret'}));
+  const roi={width:1000,height:600,duration_seconds:30,confirmed:false,
+    roi:{x1:0,y1:0,x2:1000,y2:600},net_roi:{x1:400,y1:200,x2:500,y2:300}};
+  mock.job.mockResolvedValue({...completed,status:'awaiting_roi',events:[],displayed_event_ids:[],result:null,roi});
+  render(<App/>);
+  const button=await screen.findByRole('button',{name:'确认区域并开始识别'});
+  await userEvent.type(screen.getByRole('textbox'),'开始识别');
+  fireEvent.submit(screen.getByRole('textbox').closest('form')!);
+  expect(await screen.findByText('请先确认画面中的投篮分析区和篮网区域，然后我会开始识别。')).toBeVisible();
+  expect(mock.send).not.toHaveBeenCalled();
+  expect(JSON.parse(localStorage.getItem('basketball-session')!).pending).toBeUndefined();
+  await userEvent.click(button);
+  expect(mock.confirmRoi).toHaveBeenCalledWith({id:'one',token:'secret'},expect.objectContaining({roi:roi.roi,net_roi:roi.net_roi}),expect.any(AbortSignal));
 });
 test("welcome and upload guidance render even when service is unavailable", async () => {
   mock.config.mockRejectedValue(new Error("离线"));

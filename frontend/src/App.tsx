@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { RoiEditor } from './RoiEditor';
 import {
   api,
   ApiError,
@@ -7,6 +8,7 @@ import {
   type Job,
   type Message,
   type Session,
+  type Rectangle,
 } from "./api";
 const KEY = "basketball-session";
 function restore(): Session | null {
@@ -26,6 +28,8 @@ function save(s: Session) {
 }
 const stages: Record<Job["status"], string> = {
   queued: "等待处理",
+  preparing_roi: "正在准备区域建议",
+  awaiting_roi: "请确认识别区域",
   analyzing: "正在分析进球",
   rendering: "正在生成集锦",
   completed: "集锦已就绪",
@@ -35,7 +39,7 @@ const stages: Record<Job["status"], string> = {
 const jobLabel = (j: Job) => j.status === "completed" && !j.result
   ? "分析已完成，未生成集锦" : stages[j.status];
 const active = (j: Job | null) =>
-  !!j && ["queued", "analyzing", "rendering"].includes(j.status);
+  !!j && ["queued", "preparing_roi", "analyzing", "rendering"].includes(j.status);
 const examples = [
   "每球前面改成 8 秒",
   "每球后面多留 1 秒",
@@ -71,6 +75,7 @@ export default function App() {
   const [picks, setPicks] = useState<string[]>([]);
   const requestedPreviews = useRef(new Set<string>());
   const selectionRequest = useRef<{key:string; id:string} | null>(null);
+  const roiRequest = useRef<{key:string; id:string} | null>(null);
   const pickKey = JSON.stringify([session?.id,job?.events,job?.displayed_event_ids]);
   useEffect(() => {
     setPicks(job?.displayed_event_ids.length ? job.displayed_event_ids : (job?.events || []).filter(e => ["made","probable"].includes(e.label)).map(e => e.id));
@@ -215,6 +220,23 @@ export default function App() {
     } catch(e) { if (!c.signal.aborted && version===generation.current) setError(reason(e)); }
     finally { if (version===generation.current) setSending(false); }
   }
+  async function confirmRoi(roi:Rectangle,net_roi:Rectangle) {
+    if(!session || busy) return;
+    const c=new AbortController(); action.current?.abort(); action.current=c;
+    const version=generation.current;
+    const key=JSON.stringify([session.id,roi,net_roi]);
+    if(roiRequest.current?.key!==key) roiRequest.current={key,id:crypto.randomUUID()};
+    setSending(true);setError('');
+    try {
+      await api.confirmRoi(session,{request_id:roiRequest.current.id,roi,net_roi},c.signal);
+      if(c.signal.aborted || version!==generation.current) return;
+      roiRequest.current=null;
+      requestedPreviews.current.delete(session.id);
+      setJob(j=>j?{...j,status:'queued',events:[],displayed_event_ids:[],candidate_clips:{},result:null,roi:{...j.roi!,roi,net_roi,confirmed:true}}:j);
+      setRefresh(v=>v+1);
+    } catch(e) {if(!c.signal.aborted && version===generation.current) setError(reason(e));}
+    finally {if(version===generation.current)setSending(false);}
+  }
   async function upload(file: File) {
     if (!config) {
       note("无法读取上传限制，请确认服务可用后刷新页面。");
@@ -291,6 +313,10 @@ export default function App() {
     }
     if (unavailable) return;
     const isProgress = value === "查看进度";
+    if (job?.roi && !job.roi.confirmed && !isProgress) {
+      note('请先确认画面中的投篮分析区和篮网区域，然后我会开始识别。');
+      return;
+    }
     const isRetry = session.pending?.text === value;
     if (session.pending && !isProgress && !isRetry) {
       note("上一条剪辑指令尚未确认。请重发原指令，或查看进度后等待消息恢复。");
@@ -371,7 +397,7 @@ export default function App() {
           <p className="welcome">
             你好，我是篮球进球剪辑助手。我可以从固定机位、篮筐清晰的篮球视频中寻找可靠进球，生成可播放、下载的集锦。请先点击下方按钮上传一段短视频。
           </p>
-          <p>默认每球保留前 5 秒、后 2 秒。高可信疑似进球会标注纳入，普通不确定事件不加入。</p>
+          <p>上传后，请先确认投篮分析区和篮网区域。我会使用原项目的识别流程寻找候选。默认每球保留前 5 秒、后 2 秒，疑似进球可以逐条预览核对。</p>
           <div className="upload-box">
             <label
               className={"upload-button " + (busy || !config ? "disabled" : "")}
@@ -435,7 +461,7 @@ export default function App() {
                 </span>
                 <h3>从一段球场视频开始</h3>
                 <p>
-                  上传后，我会分析进球并自动生成集锦。
+                  上传后，先确认画面上的两个识别区域，再开始分析进球并生成集锦。
                   <br />
                   剪辑完成后，还可以在这里调整。
                 </p>
@@ -479,6 +505,10 @@ export default function App() {
                 </button>
               </div>
             )}
+            {session && job?.roi && job.roi.width>0 && <RoiEditor
+              key={session.id+JSON.stringify(job.roi)} value={job.roi}
+              src={mediaUrl(`/api/jobs/${session.id}/source`,session)} disabled={busy}
+              onConfirm={(roi,net)=>void confirmRoi(roi,net)}/>}
             {session?.pending && (
               <div className="notice" role="status">
                 上一条剪辑指令尚未确认，可重发原指令或查看进度。确认前暂不接受其他修改。

@@ -19,6 +19,7 @@ from .store import Store
 
 
 class Settings(BaseModel):
+    engine_root: Path | None = Field(default_factory=lambda: Path(os.environ['BASKETBALL_ENGINE_ROOT']) if os.getenv('BASKETBALL_ENGINE_ROOT') else None)
     data_dir: Path = Field(
         default_factory=lambda: Path(os.getenv("BASKETBALL_DATA_DIR", "./data"))
     )
@@ -47,6 +48,21 @@ class MessageInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     request_id: str = Field(min_length=1, max_length=128)
     text: str = Field(min_length=1, max_length=4000)
+
+
+class Rectangle(BaseModel):
+    model_config = ConfigDict(extra='forbid', allow_inf_nan=False)
+    x1: float = Field(ge=0)
+    y1: float = Field(ge=0)
+    x2: float = Field(gt=0)
+    y2: float = Field(gt=0)
+
+
+class RoiInput(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    request_id: str = Field(min_length=1, max_length=128)
+    roi: Rectangle
+    net_roi: Rectangle
 
 
 def probe_duration(path):
@@ -129,8 +145,8 @@ def create_app(settings=None, *, probe=probe_duration, executor=None):
             except Exception:
                 raise HTTPException(422, "视频损坏、无视频轨道或超过时长限制") from None
             token = secrets.token_urlsafe(32)
-            store.create(jid, token)
-            return dict(id=jid, token=token, status="queued")
+            store.create(jid, token, require_roi=True)
+            return dict(id=jid, token=token, status="preparing_roi")
         except BaseException:
             shutil.rmtree(directory)
             raise
@@ -150,7 +166,14 @@ def create_app(settings=None, *, probe=probe_duration, executor=None):
             result=state["result"],
             error=state["error"],
             candidate_clips=public_clips(state),
+            roi=state.get('roi'),
         )
+
+    @app.post('/api/jobs/{jid}/roi')
+    def confirm_roi(jid: str, payload: RoiInput, x_task_token: str | None = Header(default=None)):
+        authorized(jid, x_task_token)
+        code, body = store.confirm_roi(jid, payload.request_id, payload.roi.model_dump(), payload.net_roi.model_dump())
+        return JSONResponse(body, status_code=code)
 
     @app.get("/api/jobs/{jid}/messages")
     def messages(jid: str, x_task_token: str | None = Header(default=None)):

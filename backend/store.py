@@ -10,7 +10,7 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
-ACTIVE = ("queued", "analyzing", "rendering")
+ACTIVE = ("queued", "preparing_roi", "analyzing", "rendering")
 
 
 def now():
@@ -60,7 +60,7 @@ class Store:
             (jid, json.dumps(payload, ensure_ascii=False)),
         )
 
-    def create(self, jid, token):
+    def create(self, jid, token, *, require_roi=False):
         state = dict(
             events=None,
             displayed_event_ids=[],
@@ -68,6 +68,7 @@ class Store:
             result=None,
             error=None,
             pending_context=None,
+            roi={'confirmed':False} if require_roi else None,
         )
         with self.connect() as db:
             db.execute(
@@ -76,12 +77,42 @@ class Store:
                     jid,
                     hashlib.sha256(token.encode()).hexdigest(),
                     time.time() + self.settings.retention_hours * 3600,
-                    "queued",
+                    "preparing_roi" if require_roi else "queued",
                     json.dumps(state),
                 ),
             )
             db.execute("INSERT INTO queue(job_id) VALUES (?)", (jid,))
-            self.message(db, jid, "assistant", "已收到，正在检查视频")
+            self.message(db, jid, "assistant", "已收到，正在准备区域建议。请确认投篮分析区和篮网区域，然后我会识别候选进球。" if require_roi else "已收到，正在检查视频")
+
+    def confirm_roi(self, jid, request_id, roi, net_roi):
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            replay = db.execute('SELECT status_code,response FROM requests WHERE job_id=? AND request_id=?', (jid,request_id)).fetchone()
+            if replay:
+                return replay['status_code'], json.loads(replay['response'])
+            job = db.execute('SELECT * FROM jobs WHERE id=?', (jid,)).fetchone()
+            state = json.loads(job['state'])
+            current = state.get('roi') or {}
+            if job['status'] in ACTIVE:
+                return 409, {'detail':'任务正在处理中，请稍后再确认区域'}
+            width, height = current.get('width',0), current.get('height',0)
+            for box in (roi, net_roi):
+                if not (0 <= box['x1'] < box['x2'] <= width and 0 <= box['y1'] < box['y2'] <= height):
+                    return 422, {'detail':'区域必须位于视频画面内，且宽高大于零'}
+            if roi['x2']-roi['x1'] < max(64,width*.08) or roi['y2']-roi['y1'] < max(96,height*.12):
+                return 422, {'detail':'投篮分析区过小，请覆盖完整投篮和球的运动区域'}
+            if not (roi['x1'] <= net_roi['x1'] < net_roi['x2'] <= roi['x2'] and roi['y1'] <= net_roi['y1'] < net_roi['y2'] <= roi['y2']):
+                return 422, {'detail':'篮网区域必须位于投篮分析区内'}
+            state.update(roi={**current,'roi':roi,'net_roi':net_roi,'confirmed':True},events=None,
+                         displayed_event_ids=[],result=None,result_path=None,candidate_clips={},error=None,
+                         pending_context=None,plan=dict(before_seconds=5,after_seconds=2,excluded_event_ids=[]))
+            body = {'request_id':request_id,'status':'queued'}
+            db.execute('UPDATE jobs SET status=?,state=? WHERE id=?', ('queued',json.dumps(state),jid))
+            db.execute('INSERT INTO queue(job_id,request_id) VALUES (?,?)', (jid,request_id))
+            db.execute('INSERT INTO requests VALUES (?,?,?,?)', (jid,request_id,202,json.dumps(body)))
+            self.message(db,jid,'user','已确认投篮分析区和篮网区域',request_id)
+            self.message(db,jid,'assistant','区域已确认，开始原项目的粗筛、精筛和重筛。',request_id)
+            return 202, body
 
     def authorize(self, jid, token):
         with self.connect() as db:
@@ -107,9 +138,12 @@ class Store:
             ).fetchone()
             if replay:
                 return replay["status_code"], json.loads(replay["response"])
-            job = db.execute("SELECT status FROM jobs WHERE id=?", (jid,)).fetchone()
+            job = db.execute("SELECT status,state FROM jobs WHERE id=?", (jid,)).fetchone()
             if not progress and job["status"] in ACTIVE:
                 return 409, {"detail": "任务正在处理中，请稍后再修改"}
+            roi = json.loads(job['state']).get('roi')
+            if not progress and roi is not None and not roi.get('confirmed'):
+                return 409, {'detail':'请先在视频中确认投篮分析区和篮网区域'}
             response = dict(
                 request_id=request_id, status="completed" if progress else "queued"
             )
@@ -127,6 +161,8 @@ class Store:
                     "completed": "已完成",
                     "failed": "处理失败",
                     "interrupted": "任务已中断",
+                    "preparing_roi": "正在准备区域建议",
+                    "awaiting_roi": "请确认投篮分析区和篮网区域",
                 }
                 self.message(db, jid, "status", labels[job["status"]], request_id)
             else:
@@ -150,13 +186,14 @@ class Store:
                 return None
             db.execute("UPDATE queue SET status='running' WHERE seq=?", (row["seq"],))
             state = json.loads(row["state"])
-            stage = "analyzing" if state["events"] is None else "rendering"
+            roi = state.get('roi')
+            stage = 'preparing_roi' if roi is not None and not roi.get('confirmed') else ("analyzing" if state["events"] is None else "rendering")
             db.execute("UPDATE jobs SET status=? WHERE id=?", (stage, row["job_id"]))
             self.message(
                 db,
                 row["job_id"],
                 "status",
-                "正在分析视频" if stage == "analyzing" else "正在处理剪辑要求",
+                '正在准备区域建议' if stage == 'preparing_roi' else ("正在分析视频" if stage == "analyzing" else "正在处理剪辑要求"),
                 row["request_id"],
             )
             return dict(row)
@@ -180,7 +217,7 @@ class Store:
         with self.connect() as db:
             db.execute("BEGIN IMMEDIATE")
             rows = db.execute(
-                "SELECT id FROM jobs WHERE expires_at<=? AND status NOT IN ('analyzing','rendering')",
+                "SELECT id FROM jobs WHERE expires_at<=? AND NOT EXISTS (SELECT 1 FROM queue WHERE queue.job_id=jobs.id AND queue.status='running') AND status NOT IN ('analyzing','rendering')",
                 (time.time(),),
             ).fetchall()
             for row in rows:

@@ -97,6 +97,8 @@ def test_upload_modify_and_failed_render_preserve_previous_movie(tmp_path, sourc
             analyzer=simulated_recognition, renderer=rendering)
 
         def executor(**state):
+            if state.get('operation') == 'prepare_roi':
+                return {'roi':{'width':320,'height':240,'duration_seconds':30,'roi':None,'net_roi':None,'confirmed':False}}
             on_stage = state['on_stage']
             def record(stage):
                 stages.append(stage)
@@ -111,7 +113,10 @@ def test_upload_modify_and_failed_render_preserve_previous_movie(tmp_path, sourc
             job = upload.json()
             base = f"/api/jobs/{job['id']}"
             headers = {'X-Task-Token': job['token']}
-            assert client.get(base, headers=headers).json()['status'] == 'queued'
+            assert client.get(base, headers=headers).json()['status'] == 'preparing_roi'
+            assert app.state.worker.run_once()
+            assert client.get(base, headers=headers).json()['status'] == 'awaiting_roi'
+            assert client.post(base+'/roi',headers=headers,json={'request_id':'roi','roi':{'x1':0,'y1':0,'x2':320,'y2':240},'net_roi':{'x1':140,'y1':60,'x2':180,'y2':100}}).status_code==202
             assert app.state.worker.run_once()
             first = client.get(base, headers=headers).json()
             assert first['status'] == 'completed', first
@@ -163,7 +168,7 @@ def test_upload_modify_and_failed_render_preserve_previous_movie(tmp_path, sourc
             assert not app.state.worker.run_once()
 
 
-def test_real_worker_process_reports_missing_weights(tmp_path, source):
+def test_real_worker_process_reports_missing_engine(tmp_path, source):
     """Smoke production worker/runner in a separate process with no actual weights."""
     settings = Settings(data_dir=tmp_path / 'process-store', model_path=tmp_path / 'missing.pt')
     app = create_app(settings)
@@ -172,7 +177,7 @@ def test_real_worker_process_reports_missing_weights(tmp_path, source):
         assert response.status_code == 202
         job = response.json()
         env = dict(os.environ, BASKETBALL_DATA_DIR=str(settings.data_dir),
-                   BASKETBALL_MODEL_PATH=str(settings.model_path))
+                       BASKETBALL_MODEL_PATH=str(settings.model_path), BASKETBALL_ENGINE_ROOT=str(tmp_path/'missing-engine'))
         process = subprocess.Popen([sys.executable, '-m', 'backend.worker'], env=env,
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
             creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
@@ -184,7 +189,7 @@ def test_real_worker_process_reports_missing_weights(tmp_path, source):
                     break
                 assert process.poll() is None, 'worker exited before consuming the job'
                 time.sleep(.1)
-            assert state['status'] == 'failed' and '模型' in state['error']
+            assert state['status'] == 'failed' and '引擎' in state['error']
             assert state['result'] is None
             assert not list(settings.data_dir.rglob('execution*.json'))
         finally:
@@ -201,7 +206,7 @@ def test_manually_selected_uncertain_event_renders_without_model(tmp_path, sourc
         h={'X-Task-Token':job['token']};base='/api/jobs/'+job['id']
         with app.state.store.connect() as db:
             row=db.execute('SELECT state FROM jobs WHERE id=?',(job['id'],)).fetchone()
-            state=json.loads(row['state']);state['events']=[{'id':'maybe','time':10,'label':'uncertain','evidence':{}}]
+            state=json.loads(row['state']);state['roi']={'confirmed':True};state['events']=[{'id':'maybe','time':10,'label':'uncertain','evidence':{}}]
             db.execute("UPDATE jobs SET status='completed',state=? WHERE id=?",(json.dumps(state),job['id']))
             db.execute("UPDATE queue SET status='completed' WHERE job_id=?",(job['id'],))
         assert client.post(base+'/selection',headers=h,json={'request_id':'pick','event_ids':['maybe']}).status_code==202

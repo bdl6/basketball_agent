@@ -52,7 +52,7 @@ class Worker:
     def stage(self, jid, stage):
         summary = stage if isinstance(stage, dict) else {}
         status = summary.get("status") if summary else stage
-        if status not in ("analyzing", "rendering"):
+        if status not in ("preparing_roi", "analyzing", "rendering"):
             return
         message = summary.get("message") or (
             "正在分析视频" if status == "analyzing" else "正在生成集锦"
@@ -136,6 +136,18 @@ class Worker:
         work.mkdir()
         try:
             video = next(directory.glob("source.*"))
+            roi = state.get('roi')
+            if roi is not None and not roi.get('confirmed'):
+                output = self.execute(dict(operation='prepare_roi', video_path=video, work_dir=work,
+                    model_path=self.store.settings.model_path,
+                    engine_root=str(self.store.settings.engine_root) if self.store.settings.engine_root else None,
+                    on_stage=lambda s:self.stage(jid,s)))
+                state.update(roi=output['roi'], error=None)
+                with self.store.connect() as db:
+                    db.execute('UPDATE jobs SET status=?,state=? WHERE id=?', ('awaiting_roi',json.dumps(state),jid))
+                    db.execute("UPDATE queue SET status='completed' WHERE seq=?", (claimed['seq'],))
+                    self.store.message(db,jid,'assistant',output['roi'].get('warning') or '请检查画面上的投篮分析区和篮网区域，可以拖动重新框选。确认后我会开始识别。')
+                return True
             execution_state = json.loads(json.dumps(state))
             selection = json.loads(claimed['selection']) if claimed.get('selection') else None
             if selection is not None:
@@ -152,6 +164,8 @@ class Worker:
                     video_path=video,
                     work_dir=work,
                     model_path=self.store.settings.model_path,
+                    roi=state.get('roi'),
+                    engine_root=str(self.store.settings.engine_root) if self.store.settings.engine_root else None,
                     events=execution_state["events"],
                     plan=execution_state["plan"],
                     displayed_event_ids=state["displayed_event_ids"],

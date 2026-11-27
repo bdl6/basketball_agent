@@ -7,7 +7,7 @@ from pathlib import Path
 import subprocess
 import uuid
 
-from basketball_detect.media import inspect_video, probe
+from video_engine.media import inspect_video, probe
 from contracts.models import EditPlan, Event, RenderResult
 
 

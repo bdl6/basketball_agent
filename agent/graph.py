@@ -14,7 +14,7 @@ def create_graph(*, interpreter=None, analyzer=None, renderer=None):
     interpreter = interpreter if interpreter is not None else OpenAIInterpreter()
     default_analyzer = analyzer is None
     if analyzer is None:
-        from video_engine.analyzer import analyze_video
+        from video_engine.upstream import analyze_video
         analyzer = analyze_video
     if renderer is None:
         from video_engine.highlights import render_highlights
@@ -52,7 +52,7 @@ def create_graph(*, interpreter=None, analyzer=None, renderer=None):
 
     def analyze(state):
         state['on_stage']('analyzing')
-        options = {'on_progress': state['on_stage']} if default_analyzer else {}
+        options = {'on_progress': state['on_stage'], 'roi':state.get('roi'), 'engine_root':state.get('engine_root')} if default_analyzer else {}
         analysis = analyzer(state['video_path'], state['work_dir'], model_path=state['model_path'], **options)
         return {'events': [event.model_dump() for event in analysis.events]}
 
@@ -116,9 +116,10 @@ def create_graph(*, interpreter=None, analyzer=None, renderer=None):
 
 def execute_job(video_path: Path, work_dir: Path, *, model_path: Path, events: list[dict] | None,
                 plan: dict, displayed_event_ids: list[str], text: str | None,
-                pending_context: dict | None = None, on_stage: Callable[[str | dict], None]) -> dict:
+                pending_context: dict | None = None, roi: dict | None = None, engine_root: str | None = None,
+                on_stage: Callable[[str | dict], None]) -> dict:
     result = create_graph().invoke({'video_path': Path(video_path), 'work_dir': Path(work_dir),
         'model_path': Path(model_path), 'events': events, 'plan': plan,
         'displayed_event_ids': displayed_event_ids, 'text': text,
-        'pending_context': pending_context, 'on_stage': on_stage})
+        'pending_context': pending_context, 'on_stage': on_stage, 'roi':roi, 'engine_root':engine_root})
     return {key: result.get(key) for key in ('events', 'plan', 'displayed_event_ids', 'result_path', 'message', 'pending_context')}

@@ -20,6 +20,8 @@ export interface Job {
   id: string;
   status:
     | "queued"
+    | "preparing_roi"
+    | "awaiting_roi"
     | "analyzing"
     | "rendering"
     | "completed"
@@ -31,6 +33,13 @@ export interface Job {
   result: { url: string; download_url: string; revision: string } | null;
   error: string | null;
   candidate_clips?: Record<string,{status:"ready"|"failed";url?:string;error?:string}>;
+  roi?: RoiState | null;
+}
+export interface Rectangle { x1:number; y1:number; x2:number; y2:number }
+export interface RoiState {
+  width:number; height:number; duration_seconds:number;
+  roi:Rectangle|null; net_roi:Rectangle|null; confirmed:boolean;
+  preview_time_seconds?:number; warning?:string;
 }
 export class ApiError extends Error {
   constructor(
@@ -105,6 +114,8 @@ async function watchProgress(session: Session, receive: (data: ProgressSnapshot)
   if (!signal.aborted) throw new ApiError("进度连接已断开");
 }
 export const api = {
+  confirmRoi: (s:Session, body:{request_id:string;roi:Rectangle;net_roi:Rectangle}, signal?:AbortSignal) =>
+    request<{status:string}>(base(s)+"/roi",s,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body),signal}),
   prepareCandidates: (s:Session,signal?:AbortSignal) => request<{status:string}>(base(s)+"/candidates",s,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({request_id:crypto.randomUUID()}),signal}),
   select: (s: Session, body: {request_id: string; event_ids: string[]}, signal?: AbortSignal) =>
     request<{status:string}>(base(s)+"/selection",s,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body),signal}),

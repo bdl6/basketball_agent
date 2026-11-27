@@ -16,7 +16,7 @@ def snapshot(store, jid, token):
     return {'job': dict(id=jid, status=row['status'], events=state['events'] or [],
             displayed_event_ids=state['displayed_event_ids'], plan=state['plan'],
             result=state['result'], error=state['error'],
-            candidate_clips=public_clips(state)), 'messages': messages}
+            candidate_clips=public_clips(state), roi=state.get('roi')), 'messages': messages}
 
 
 async def stream_task_events(store, jid, token, request, *, interval=.3):
